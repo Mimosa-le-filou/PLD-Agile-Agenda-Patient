@@ -1,0 +1,7 @@
+ID Tâche	Couche / Périmètre	Description technique précise (PHP / MariaDB)	Estimation (h)	Statut
+T1.1	Base de données (database/)	Créer la migration rejouable database/migrations/2026-11-18-evaluations-patient.sql et mettre à jour database/schema.sql (ClinicalImpression, ClinicalObservation, ShockRoomAssessment, EpisodeDiagnosis, contrainte CHECK, colonne générée activeKey, lien sur CarePlan).	2	À faire
+T1.2	Documentation (ARCHITECTURE.md)	Mettre à jour le diagramme de classes du domaine, le modèle de données ER et le glossaire dans ARCHITECTURE.md.	1	À faire
+T1.3	Domaine PHP (src/Domain/)	Implémenter les entités immuables PHP 8.4 : Pathology, ClinicalImpression, ClinicalObservation, ShockRoomAssessment, EpisodeDiagnosis (constructeurs typés, constantes métier, accesseurs get…()).	3	À faire
+T1.4	Référentiels PHP (src/Domain/)	Compléter ClinicalScales.php (listes normalisées par système physiologique, scores Glasgow / IGS II, grades déchocage) et AuditEvent.php (ENTITY_CLINICAL_IMPRESSION, ENTITY_EPISODE_DIAGNOSIS).	1	À faire
+T1.5	Accès aux données (src/Dao/)	Créer ClinicalImpressionDao, ClinicalObservationDao, ShockRoomAssessmentDao et EpisodeDiagnosisDao (requêtes préparées PDO, génération d'ID VARCHAR(20) via MAX(CAST(id AS UNSIGNED)) + 1 FOR UPDATE, filtre removedAt IS NULL).	4	À faire
+T1.6	Tests automatisés (tests/)	Ajouter les cas de test dans SchemaConstraintsTest (vérification des CHECK et UNIQUE) et créer EvaluationDaoTest (insertion, lecture, isolation des lignes supprimées logiquement).	2	À faire

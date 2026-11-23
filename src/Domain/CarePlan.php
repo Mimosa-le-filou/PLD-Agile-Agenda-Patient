@@ -8,8 +8,8 @@ use DateTimeImmutable;
 
 /**
  * Prescription (« ordonnance ») d'un séjour (ressource HL7 CarePlan, table CarePlan) : qui
- * prescrit, dans quel mode, la validation, la note libre, et ses lignes (ServiceRequest,
- * MedicationRequest). Les prescriptions sont la seule source de l'agenda.
+ * prescrit, dans quel mode, la validation, la note libre, l'évaluation médicale dont elle découle,
+ * et ses lignes (ServiceRequest, MedicationRequest). Les prescriptions sont la seule source de l'agenda.
  *
  * Le statut n'est jamais stocké : il se déduit des dates de validation et d'arrêt (RG5).
  */
@@ -35,7 +35,8 @@ class CarePlan
         private ?string $idValidator = null,
         private ?DateTimeImmutable $validatedAt = null,
         private ?string $idPlanDefinition = null,
-        private ?string $note = null
+        private ?string $note = null,
+        private ?string $idClinicalImpression = null
     ) {
     }
 
@@ -100,6 +101,12 @@ class CarePlan
     public function getNote(): ?string
     {
         return $this->note;
+    }
+
+    /** Évaluation médicale à l'origine de l'ordonnance ; null = sans lien avec une évaluation. */
+    public function getIdClinicalImpression(): ?string
+    {
+        return $this->idClinicalImpression;
     }
 
     /** RG5 : validée si une date de validation est enregistrée. */

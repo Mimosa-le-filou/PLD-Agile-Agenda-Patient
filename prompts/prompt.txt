@@ -1,0 +1,3 @@
+Lis l'intégralité de ce projet situé dans ce dossier aura.
+Ta tâche est de réaliser le sprint 1, consulte le reste des documents dans ce dossier prompts et réalise l'implémentation de ce sprint dans le projet aura. 
+J'attends également un compte rendu de tout ce que tu auras fait dans ce dossier prompts.

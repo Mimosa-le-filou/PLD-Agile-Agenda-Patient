@@ -14,7 +14,8 @@ use PHPUnit\Framework\TestCase;
  * Contraintes essentielles de database/schema.sql, vérifiées par la base elle-même : chaque instruction
  * invalide est refusée avec le bon code d'erreur ET par la bonne contrainte (un refus pour une autre
  * raison ne compte pas). Deux instructions valides vérifient que les contraintes ne refusent pas trop.
- * Cas choisis parmi ceux de database/test_contraintes.sql (écrit par Didac Espin).
+ * Cas choisis parmi ceux de database/test_contraintes.sql (écrit par Didac Espin), puis ceux des tables des
+ * évaluations patient (sprint 1 : ClinicalImpression, ClinicalObservation, ShockRoomAssessment, EpisodeDiagnosis).
  *
  * Codes MariaDB (SQLSTATE 23000) : 1062 doublon, 1048 colonne NULL, 1452 parent absent, 1451 parent
  * encore référencé, 4025 CHECK. Transaction annulée en tearDown ; ignoré sans DB_HOST/DB_NAME.
@@ -31,6 +32,14 @@ final class SchemaConstraintsTest extends TestCase
     private const ZZ_PATIENT = "INSERT INTO Patient (idPatient, ipp, lastName) VALUES ('ZZP1', NULL, 'Zzcontrainte')";
     private const ZZ_EPISODE = "INSERT INTO EpisodeOfCare (idEpisodeOfCare, idPatient, idHealthcareService,
         episodeNumber, admissionDate) VALUES ('ZZE1', 'ZZP1', 'SRV01', 'ZZ-000001', '2030-01-01 08:00:00')";
+
+    /** Évaluations « ZZ » (sprint 1, évaluations patient) sur le séjour 1 de database/test.sql. */
+    private const ZZ_SHOCK_ROOM = "INSERT INTO ClinicalImpression (idClinicalImpression, idEpisodeOfCare,
+        idPractitioner, kind, evaluatedAt) VALUES ('ZZCI1', '1', 'PRA01', 'SHOCK_ROOM', '2030-01-01 08:00:00')";
+    private const ZZ_OBSERVATION = "INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression,
+        category, notes, observedAt) VALUES ('ZZCO1', 'ZZCI1', 'NEUROLOGICAL', 'G15', '2030-01-01 08:05:00')";
+    private const ZZ_DIAGNOSIS = "INSERT INTO EpisodeDiagnosis (idEpisodeDiagnosis, idEpisodeOfCare, idPathology,
+        status, diagnosedAt) VALUES ('ZZD1', '1', 'PTH01', 'ACTIVE', '2030-01-01 09:00:00')";
 
     private PDO $pdo;
 
@@ -161,6 +170,104 @@ final class SchemaConstraintsTest extends TestCase
                 self::DUPLICATE,
                 'uq_careteam_name',
             ],
+            'Évaluation : type inconnu (casse comprise)' => [
+                [],
+                "INSERT INTO ClinicalImpression (idClinicalImpression, idEpisodeOfCare, idPractitioner, kind,
+                    evaluatedAt) VALUES ('ZZCI2', '1', 'PRA01', 'standard', '2030-01-01 08:00:00')",
+                self::CHECK,
+                'chk_clinicalimpression_kind',
+            ],
+            'Évaluation : séjour inexistant' => [
+                [],
+                "INSERT INTO ClinicalImpression (idClinicalImpression, idEpisodeOfCare, idPractitioner, kind,
+                    evaluatedAt) VALUES ('ZZCI2', 'ZZ_INCONNU', 'PRA01', 'STANDARD', '2030-01-01 08:00:00')",
+                self::NO_PARENT,
+                'fk_episode_clinicalimpression',
+            ],
+            'Évaluation : facteur d\'agression sous 1' => [
+                [],
+                "INSERT INTO ClinicalImpression (idClinicalImpression, idEpisodeOfCare, idPractitioner, kind,
+                    evaluatedAt, aggressionFactor) VALUES ('ZZCI2', '1', 'PRA01', 'STANDARD', '2030-01-01 08:00:00',
+                    0.5)",
+                self::CHECK,
+                'chk_clinicalimpression_aggression',
+            ],
+            'Fiche de suivi : système inconnu' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression, category, notes,
+                    observedAt) VALUES ('ZZCO2', 'ZZCI1', 'DERMATOLOGICAL', 'RAS', '2030-01-01 08:05:00')",
+                self::CHECK,
+                'chk_clinicalobservation_category',
+            ],
+            'Fiche de suivi : ni liste, ni note, ni interprétation' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression, category, observedAt)
+                 VALUES ('ZZCO2', 'ZZCI1', 'ABDOMINAL', '2030-01-01 08:05:00')",
+                self::CHECK,
+                'chk_clinicalobservation_content',
+            ],
+            'Fiche de suivi : deux fiches actives pour le même système' => [
+                [self::ZZ_SHOCK_ROOM, self::ZZ_OBSERVATION],
+                "INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression, category, notes,
+                    observedAt) VALUES ('ZZCO2', 'ZZCI1', 'NEUROLOGICAL', 'G14', '2030-01-01 09:00:00')",
+                self::DUPLICATE,
+                'uq_clinicalobservation_category',
+            ],
+            'Déchocage : Glasgow sous 3' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO ShockRoomAssessment (idShockRoomAssessment, idClinicalImpression, glasgowScore)
+                 VALUES ('ZZSA1', 'ZZCI1', 2)",
+                self::CHECK,
+                'chk_shockroom_glasgow',
+            ],
+            'Déchocage : IGS II au-delà de 163' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO ShockRoomAssessment (idShockRoomAssessment, idClinicalImpression, igs2Score)
+                 VALUES ('ZZSA1', 'ZZCI1', 164)",
+                self::CHECK,
+                'chk_shockroom_igs2',
+            ],
+            'Déchocage : deux bilans pour une évaluation' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO ShockRoomAssessment (idShockRoomAssessment, idClinicalImpression)
+                 VALUES ('ZZSA1', 'ZZCI1'), ('ZZSA2', 'ZZCI1')",
+                self::DUPLICATE,
+                'uq_shockroom_impression',
+            ],
+            'Diagnostic : statut inconnu' => [
+                [],
+                "INSERT INTO EpisodeDiagnosis (idEpisodeDiagnosis, idEpisodeOfCare, idPathology, status,
+                    diagnosedAt) VALUES ('ZZD2', '1', 'PTH01', 'CONFIRMED', '2030-01-01 09:00:00')",
+                self::CHECK,
+                'chk_episodediagnosis_status',
+            ],
+            'Diagnostic : même pathologie active deux fois sur le séjour' => [
+                [self::ZZ_DIAGNOSIS],
+                "INSERT INTO EpisodeDiagnosis (idEpisodeDiagnosis, idEpisodeOfCare, idPathology, status,
+                    diagnosedAt) VALUES ('ZZD2', '1', 'PTH01', 'SUSPECTED', '2030-01-02 09:00:00')",
+                self::DUPLICATE,
+                'uq_episodediagnosis_pathology',
+            ],
+            'Diagnostic : pathologie hors référentiel' => [
+                [],
+                "INSERT INTO EpisodeDiagnosis (idEpisodeDiagnosis, idEpisodeOfCare, idPathology, status,
+                    diagnosedAt) VALUES ('ZZD2', '1', 'ZZ_INCONNUE', 'ACTIVE', '2030-01-01 09:00:00')",
+                self::NO_PARENT,
+                'fk_pathology_episodediagnosis',
+            ],
+            'Ordonnance : évaluation inexistante' => [
+                [],
+                "INSERT INTO CarePlan (idCarePlan, idEpisodeOfCare, idPrescriber, mode, idClinicalImpression)
+                 VALUES ('ZZC5', '1', 'PRA01', 'MEDICAL', 'ZZ_INCONNUE')",
+                self::NO_PARENT,
+                'fk_clinicalimpression_careplan',
+            ],
+            'Suppression : évaluation qui a des fiches de suivi' => [
+                [self::ZZ_SHOCK_ROOM, self::ZZ_OBSERVATION],
+                "DELETE FROM ClinicalImpression WHERE idClinicalImpression = 'ZZCI1'",
+                self::STILL_REFERENCED,
+                'fk_clinicalimpression_observation',
+            ],
             'Suppression : patient qui a un séjour' => [
                 [self::ZZ_PATIENT, self::ZZ_EPISODE],
                 "DELETE FROM Patient WHERE idPatient = 'ZZP1'",
@@ -214,6 +321,49 @@ final class SchemaConstraintsTest extends TestCase
                 ["UPDATE CareTeam SET removedAt = '2026-10-14 09:00:00' WHERE idCareTeam = 1"],
                 "INSERT INTO CareTeam (idHealthcareService, shiftDate, shift, name) VALUES ('SRV01', '2026-10-14',
                     'MATIN', 'Équipe A')",
+                1,
+            ],
+            'fiche d\'un système ressaisie après retrait de la précédente (suppression logique)' => [
+                [
+                    self::ZZ_SHOCK_ROOM,
+                    self::ZZ_OBSERVATION,
+                    "UPDATE ClinicalObservation SET removedAt = '2030-01-01 08:30:00'
+                     WHERE idClinicalObservation = 'ZZCO1'",
+                ],
+                "INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression, category, notes,
+                    observedAt) VALUES ('ZZCO2', 'ZZCI1', 'NEUROLOGICAL', 'G14', '2030-01-01 09:00:00')",
+                1,
+            ],
+            'même système sur deux évaluations différentes' => [
+                [
+                    self::ZZ_SHOCK_ROOM,
+                    self::ZZ_OBSERVATION,
+                    "INSERT INTO ClinicalImpression (idClinicalImpression, idEpisodeOfCare, idPractitioner, kind,
+                        evaluatedAt) VALUES ('ZZCI2', '1', 'PRA01', 'STANDARD', '2030-01-02 08:00:00')",
+                ],
+                "INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression, category, notes,
+                    observedAt) VALUES ('ZZCO2', 'ZZCI2', 'NEUROLOGICAL', 'G15', '2030-01-02 08:05:00')",
+                1,
+            ],
+            'pathologie rediagnostiquée après retrait du diagnostic' => [
+                [
+                    self::ZZ_DIAGNOSIS,
+                    "UPDATE EpisodeDiagnosis SET removedAt = '2030-01-01 10:00:00' WHERE idEpisodeDiagnosis = 'ZZD1'",
+                ],
+                "INSERT INTO EpisodeDiagnosis (idEpisodeDiagnosis, idEpisodeOfCare, idPathology, status,
+                    diagnosedAt) VALUES ('ZZD2', '1', 'PTH01', 'RESOLVED', '2030-01-02 09:00:00')",
+                1,
+            ],
+            'bilan de déchocage aux bornes de Glasgow et d\'IGS II' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO ShockRoomAssessment (idShockRoomAssessment, idClinicalImpression, glasgowScore, igs2Score)
+                 VALUES ('ZZSA1', 'ZZCI1', 3, 163)",
+                1,
+            ],
+            'ordonnance issue d\'une évaluation' => [
+                [self::ZZ_SHOCK_ROOM],
+                "INSERT INTO CarePlan (idCarePlan, idEpisodeOfCare, idPrescriber, mode, idClinicalImpression)
+                 VALUES ('ZZC5', '1', 'PRA01', 'MEDICAL', 'ZZCI1')",
                 1,
             ],
         ];

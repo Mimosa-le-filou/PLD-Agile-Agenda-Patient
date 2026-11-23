@@ -9,7 +9,8 @@ use DateTimeImmutable;
 /**
  * Un événement tracé (ressource HL7 AuditEvent, table AuditEvent, RG10) : qui a changé quoi, de
  * quelle valeur à quelle valeur, et quand. Champ du dossier (patient, séjour), validation ou note
- * d'un soin, suppression d'un patient, prescription confirmée malgré une allergie. Immuable : une
+ * d'un soin, suppression d'un patient, prescription confirmée malgré une allergie, évaluation médicale
+ * ou diagnostic du séjour. Immuable : une
  * ligne d'historique ne se modifie pas.
  *
  * Accesseurs get*() : un par colonne, sans logique ni validation.
@@ -22,6 +23,10 @@ final class AuditEvent
     public const ENTITY_APPOINTMENT = 'Appointment';
     /** Ordonnance : prescription confirmée malgré une allergie du patient (RG2). */
     public const ENTITY_CARE_PLAN = 'CarePlan';
+    /** Évaluation médicale (classique ou déchocage) : création, modification, retrait d'une évaluation ou de ses fiches. */
+    public const ENTITY_CLINICAL_IMPRESSION = 'ClinicalImpression';
+    /** Diagnostic du séjour : ajout, changement de statut, retrait. */
+    public const ENTITY_EPISODE_DIAGNOSIS = 'EpisodeDiagnosis';
 
     /** Auteur enregistré tant qu'il n'y a pas d'identification du praticien. */
     public const AUTHOR_UNKNOWN = 'non identifié';
@@ -44,7 +49,10 @@ final class AuditEvent
         return $this->idAuditEvent;
     }
 
-    /** ENTITY_PATIENT, ENTITY_EPISODE, ENTITY_APPOINTMENT ou ENTITY_CARE_PLAN. */
+    /**
+     * ENTITY_PATIENT, ENTITY_EPISODE, ENTITY_APPOINTMENT, ENTITY_CARE_PLAN, ENTITY_CLINICAL_IMPRESSION ou
+     * ENTITY_EPISODE_DIAGNOSIS.
+     */
     public function getEntity(): string
     {
         return $this->entity;

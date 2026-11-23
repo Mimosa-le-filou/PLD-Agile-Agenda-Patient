@@ -68,7 +68,8 @@ Toute autre adresse : page 404 (`View::error()`).
 
 ## Modèle de données
 
-Diagramme tiré de `database/schema.sql` (branche `main` du 2026-11-04) : 20 tables, 29 clés étrangères.
+Diagramme tiré de `database/schema.sql` (branche `main` du 2026-11-04, plus les tables des évaluations patient du
+sprint 1, migration `2026-11-18-evaluations-patient.sql`) : 24 tables, 37 clés étrangères.
 
 ```mermaid
 classDiagram
@@ -227,6 +228,87 @@ class PlanDefinitionAction {
 	CHECK [frequencyHours IS NULL OR frequencyHours > 0]
 	CHECK [ durationHours IS NULL OR [durationHours > 0 AND frequencyHours IS NOT NULL] ]
 }
+class ClinicalImpression {
+	*idClinicalImpression VARCHAR[20]
+	#idEpisodeOfCare VARCHAR[20] NOT NULL
+	#idPractitioner VARCHAR[20] NOT NULL
+	kind VARCHAR[20] NOT NULL
+	evaluatedAt DATETIME NOT NULL
+	generalNote TEXT
+	aggressionFactor DECIMAL[32]
+	restingEnergyExpenditure SMALLINT
+	conclusion TEXT
+	orientation VARCHAR[200]
+	recordedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	removedAt DATETIME NULL
+	CHECK [BINARY kind IN [STANDARD SHOCK_ROOM]]
+	CHECK [aggressionFactor IS NULL OR aggressionFactor BETWEEN 1 AND 3]
+	CHECK [restingEnergyExpenditure IS NULL OR restingEnergyExpenditure > 0]
+	INDEX idx_clinicalimpression_episode [idEpisodeOfCare evaluatedAt]
+}
+class ClinicalObservation {
+	*idClinicalObservation VARCHAR[20]
+	#idClinicalImpression VARCHAR[20] NOT NULL
+	category VARCHAR[20] NOT NULL
+	selectedValue VARCHAR[100]
+	notes TEXT
+	examInterpretation TEXT
+	observedAt DATETIME NOT NULL
+	removedAt DATETIME NULL
+	activeKey TINYINT GÉNÉRÉE [IF[removedAt IS NULL 1 NULL]]
+	CHECK [BINARY category IN [SEDATION NEUROLOGICAL CARDIOVASCULAR HEMODYNAMIC RESPIRATORY ABDOMINAL URORENAL]]
+	CHECK [selectedValue IS NOT NULL OR notes IS NOT NULL OR examInterpretation IS NOT NULL]
+	UNIQUE [idClinicalImpression category activeKey]
+}
+class ShockRoomAssessment {
+	*idShockRoomAssessment VARCHAR[20]
+	#idClinicalImpression VARCHAR[20] NOT NULL UNIQUE
+	arrivalGrade VARCHAR[5]
+	traumaType VARCHAR[100]
+	traumaMechanism VARCHAR[200]
+	originService VARCHAR[100]
+	smurDurationMinutes SMALLINT
+	glasgowScore TINYINT
+	hemocue1 DECIMAL[41]
+	hemocue2 DECIMAL[41]
+	smurTreatments TEXT
+	crystalloidsVolumeMl SMALLINT
+	shockRoomDurationMinutes SMALLINT
+	seniorDoctor VARCHAR[100]
+	residentDoctor VARCHAR[100]
+	medicalStudent VARCHAR[100]
+	efastResult TEXT
+	leftPupil VARCHAR[100]
+	rightPupil VARCHAR[100]
+	capillaryRefillSeconds DECIMAL[31]
+	lesionAssessment TEXT
+	paraclinicalWorkup TEXT
+	ctScanWorkup TEXT
+	otherImaging TEXT
+	abnormalLabResults TEXT
+	visceralConsult TEXT
+	orthopedicConsult TEXT
+	vascularConsult TEXT
+	otherConsults TEXT
+	igs2Score SMALLINT
+	CHECK [glasgowScore IS NULL OR glasgowScore BETWEEN 3 AND 15]
+	CHECK [igs2Score IS NULL OR igs2Score BETWEEN 0 AND 163]
+	CHECK [durées SMUR et déchocage >= 0]
+	CHECK [hémocues, cristalloïdes, recoloration >= 0]
+}
+class EpisodeDiagnosis {
+	*idEpisodeDiagnosis VARCHAR[20]
+	#idEpisodeOfCare VARCHAR[20] NOT NULL
+	#idClinicalImpression VARCHAR[20]
+	#idPathology VARCHAR[20] NOT NULL
+	status VARCHAR[20] NOT NULL
+	notes TEXT
+	diagnosedAt DATETIME NOT NULL
+	removedAt DATETIME NULL
+	activeKey TINYINT GÉNÉRÉE [IF[removedAt IS NULL 1 NULL]]
+	CHECK [BINARY status IN [ACTIVE SUSPECTED RESOLVED REFUTED]]
+	UNIQUE [idEpisodeOfCare idPathology activeKey]
+}
 class CarePlan {
 	*idCarePlan VARCHAR[20]
 	#idEpisodeOfCare VARCHAR[20] NOT NULL
@@ -237,6 +319,7 @@ class CarePlan {
 	validatedAt DATETIME
 	#idPlanDefinition VARCHAR[20]
 	note TEXT
+	#idClinicalImpression VARCHAR[20]
 	CHECK [BINARY mode IN [MEDICAL PARAMEDICAL EMERGENCY]]
 	CHECK [[idValidator IS NULL] = [validatedAt IS NULL]]
 }
@@ -342,6 +425,14 @@ CarePlan --> EpisodeOfCare
 CarePlan --> Practitioner
 CarePlan --> Practitioner
 CarePlan --> PlanDefinition
+CarePlan --> ClinicalImpression
+ClinicalImpression --> EpisodeOfCare
+ClinicalImpression --> Practitioner
+ClinicalObservation --> ClinicalImpression
+ShockRoomAssessment --> ClinicalImpression
+EpisodeDiagnosis --> EpisodeOfCare
+EpisodeDiagnosis --> ClinicalImpression
+EpisodeDiagnosis --> Pathology
 ServiceRequest --> CarePlan
 ServiceRequest --> ActivityDefinition
 ServiceRequest --> Practitioner
@@ -364,7 +455,11 @@ Lecture : `EpisodeOfCare` = séjour (numéro `AAAA-NNNNNN` généré), `CarePlan
 actif d'un médicament (alerte allergie), `PlanDefinition` = protocole (groupe de prescriptions modèle) et
 `PlanDefinitionAction` ses lignes, `Pathology` = référentiel des pathologies d'un protocole, `CareTeam` = équipe
 d'une rotation avec ses soignants (`CareTeamMember`) et ses patients (`CareTeamPatient`), `AuditEvent` = journal des
-modifications.
+modifications. Évaluations patient (sprint 1) : `ClinicalImpression` = évaluation médicale d'un séjour par un médecin
+(classique `STANDARD` ou déchocage `SHOCK_ROOM`), `ClinicalObservation` = fiche de suivi d'un système (sédation,
+neurologique, cardiovasculaire, hémodynamique, respiratoire, abdominal, uro-rénal), `ShockRoomAssessment` = bilan de
+déchocage (au plus un par évaluation), `EpisodeDiagnosis` = diagnostic du séjour (une pathologie du référentiel
+`Pathology`), `CarePlan.idClinicalImpression` = évaluation dont découle une ordonnance.
 
 Notation :
 
@@ -376,9 +471,14 @@ Notation :
 - Une flèche `A --> B` = une clé étrangère de la table A vers la table B. Deux flèches identiques = deux clés
   étrangères vers la même table (`CarePlan` : prescripteur et validateur).
 - `AuditEvent` n'a aucune clé étrangère, par choix : `entity` et `entityId` désignent la ligne tracée (`Patient`,
-  `EpisodeOfCare`, `Appointment` ou `CarePlan`). Elle n'est donc reliée à aucune table.
-- `removedAt` marque la suppression logique (`Patient`, `CareTeam`). `CareTeam.activeKey` est une colonne générée qui
-  vaut 1 pour une équipe active et NULL sinon : le nom d'équipe n'est unique que parmi les équipes actives.
+  `EpisodeOfCare`, `Appointment`, `CarePlan`, `ClinicalImpression` ou `EpisodeDiagnosis`). Elle n'est donc reliée à
+  aucune table.
+- `removedAt` marque la suppression logique (`Patient`, `CareTeam`, `ClinicalImpression`, `ClinicalObservation`,
+  `EpisodeDiagnosis`). `activeKey` est une colonne générée qui vaut 1 pour une ligne active et NULL sinon : le nom
+  d'équipe (`CareTeam`), le système d'une fiche dans son évaluation (`ClinicalObservation`) et la pathologie d'un
+  diagnostic dans son séjour (`EpisodeDiagnosis`) ne sont uniques que parmi les lignes actives.
+- `ShockRoomAssessment` n'a pas de `removedAt` : il suit son évaluation. Le type `SHOCK_ROOM` de l'évaluation est
+  vérifié à l'écriture par `ShockRoomAssessmentDao::insert()` (condition dans l'`INSERT … SELECT`).
 - `idAuditEvent` et `idCareTeam` sont des `INT UNSIGNED AUTO_INCREMENT` ; les autres identifiants sont des
   `VARCHAR(20)` calculés par l'application.
 
@@ -401,7 +501,8 @@ Six blocs, du domaine aux contrôleurs, pour rester lisibles. Légende commune :
 
 ### Domaine
 
-Tiré de `src/Domain/` (branche `main` du 2026-11-04) : entités immuables, constantes métier et catalogues.
+Tiré de `src/Domain/` (branche `main` du 2026-11-04, plus les entités des évaluations patient du sprint 1) : entités
+immuables, constantes métier et catalogues.
 
 ```mermaid
 classDiagram
@@ -470,6 +571,81 @@ classDiagram
         +getDoctorName() string
         +canValidate() bool
     }
+    class Pathology {
+        -string idPathology
+        -string label
+    }
+    class ClinicalImpression {
+        +KIND_STANDARD = STANDARD$
+        +KIND_SHOCK_ROOM = SHOCK_ROOM$
+        +KINDS$
+        -?string idClinicalImpression
+        -int idEpisodeOfCare
+        -string idPractitioner
+        -string kind
+        -DateTimeImmutable evaluatedAt
+        -?string generalNote
+        -?float aggressionFactor
+        -?int restingEnergyExpenditure
+        -?string conclusion
+        -?string orientation
+        -?DateTimeImmutable recordedAt
+        -?DateTimeImmutable removedAt
+        -ClinicalObservation[] observations
+        -?ShockRoomAssessment shockRoomAssessment
+        +isShockRoom() bool
+        +isRemoved() bool
+    }
+    class ClinicalObservation {
+        +CATEGORY_SEDATION = SEDATION$
+        +CATEGORY_NEUROLOGICAL = NEUROLOGICAL$
+        +CATEGORY_CARDIOVASCULAR = CARDIOVASCULAR$
+        +CATEGORY_HEMODYNAMIC = HEMODYNAMIC$
+        +CATEGORY_RESPIRATORY = RESPIRATORY$
+        +CATEGORY_ABDOMINAL = ABDOMINAL$
+        +CATEGORY_URORENAL = URORENAL$
+        +CATEGORIES$
+        -?string idClinicalObservation
+        -string idClinicalImpression
+        -string category
+        -?string selectedValue
+        -?string notes
+        -?string examInterpretation
+        -DateTimeImmutable observedAt
+        -?DateTimeImmutable removedAt
+    }
+    class ShockRoomAssessment {
+        +FIELDS$
+        -?string idShockRoomAssessment
+        -string idClinicalImpression
+        -?string arrivalGrade, traumaType, traumaMechanism, originService
+        -?int smurDurationMinutes, glasgowScore, crystalloidsVolumeMl
+        -?float hemocue1, hemocue2
+        -?string smurTreatments
+        -?int shockRoomDurationMinutes
+        -?string seniorDoctor, residentDoctor, medicalStudent
+        -?string efastResult, leftPupil, rightPupil
+        -?float capillaryRefillSeconds
+        -?string lesionAssessment, paraclinicalWorkup, ctScanWorkup, otherImaging, abnormalLabResults
+        -?string visceralConsult, orthopedicConsult, vascularConsult, otherConsults
+        -?int igs2Score
+    }
+    class EpisodeDiagnosis {
+        +STATUS_ACTIVE = ACTIVE$
+        +STATUS_SUSPECTED = SUSPECTED$
+        +STATUS_RESOLVED = RESOLVED$
+        +STATUS_REFUTED = REFUTED$
+        +STATUSES$
+        -?string idEpisodeDiagnosis
+        -int idEpisodeOfCare
+        -?string idClinicalImpression
+        -string idPathology
+        -string status
+        -?string notes
+        -DateTimeImmutable diagnosedAt
+        -?DateTimeImmutable removedAt
+        +isActive() bool
+    }
     class CarePlan {
         +MODES = MEDICAL, PARAMEDICAL, EMERGENCY$
         +STATUS_NOT_VALIDATED = NOT_VALIDATED$
@@ -485,6 +661,7 @@ classDiagram
         -?DateTimeImmutable validatedAt
         -?string idPlanDefinition
         -?string note
+        -?string idClinicalImpression
         +isValidated() bool
         +statusOf(line) string
     }
@@ -573,6 +750,8 @@ classDiagram
         +ENTITY_EPISODE = EpisodeOfCare$
         +ENTITY_APPOINTMENT = Appointment$
         +ENTITY_CARE_PLAN = CarePlan$
+        +ENTITY_CLINICAL_IMPRESSION = ClinicalImpression$
+        +ENTITY_EPISODE_DIAGNOSIS = EpisodeDiagnosis$
         +AUTHOR_UNKNOWN = non identifié$
         -?int idAuditEvent
         -string entity
@@ -601,6 +780,11 @@ classDiagram
         +KNAUS$
         +GIR$
         +INTERMACS$
+        +GLASGOW$
+        +GLASGOW_COMPONENTS$
+        +IGS2$
+        +ARRIVAL_GRADES$
+        +OBSERVATION_LISTS$
     }
 
     EpisodeOfCare "0..*" --> "1" Patient : idPatient
@@ -611,6 +795,15 @@ classDiagram
     CarePlan "0..*" --> "1" Practitioner : idPrescriber
     CarePlan "0..*" --> "0..1" Practitioner : idValidator
     CarePlan "0..*" --> "0..1" PlanDefinition : idPlanDefinition
+    CarePlan "0..*" --> "0..1" ClinicalImpression : idClinicalImpression
+    ClinicalImpression "0..*" --> "1" EpisodeOfCare : idEpisodeOfCare
+    ClinicalImpression "0..*" --> "1" Practitioner : idPractitioner
+    ClinicalImpression "1" *-- "0..*" ClinicalObservation : observations
+    ClinicalImpression "1" *-- "0..1" ShockRoomAssessment : shockRoomAssessment
+    EpisodeDiagnosis "0..*" --> "1" EpisodeOfCare : idEpisodeOfCare
+    EpisodeDiagnosis "0..*" --> "0..1" ClinicalImpression : idClinicalImpression
+    EpisodeDiagnosis "0..*" --> "1" Pathology : idPathology
+    PlanDefinition "0..*" --> "0..1" Pathology : idPathology
     CarePlan "1" *-- "0..*" RequestLine : lines
     RequestLine <|-- ServiceRequest
     RequestLine <|-- MedicationRequest
@@ -627,13 +820,18 @@ classDiagram
     AuditEvent ..> EpisodeOfCare : trace
     AuditEvent ..> Appointment : trace
     AuditEvent ..> CarePlan : trace
+    AuditEvent ..> ClinicalImpression : trace
+    AuditEvent ..> EpisodeDiagnosis : trace
+    ClinicalObservation ..> ClinicalScales : listes
+    ShockRoomAssessment ..> ClinicalScales : échelles
     Patient ..> RecordFields : details
     EpisodeOfCare ..> RecordFields : details
     EpisodeOfCare ..> ClinicalScales : scores
 ```
 
-Les entités se référencent par identifiant, sauf `CarePlan.lines` et `PlanDefinition.actions` qui contiennent les
-objets. `Medication` ne porte pas `idSubstance` : le lien médicament allergène est lu par
+Les entités se référencent par identifiant, sauf `CarePlan.lines`, `PlanDefinition.actions`,
+`ClinicalImpression.observations` et `ClinicalImpression.shockRoomAssessment` qui contiennent les objets. Les champs
+de `ShockRoomAssessment` sont regroupés par type pour la lisibilité (liste complète : `ShockRoomAssessment::FIELDS`). `Medication` ne porte pas `idSubstance` : le lien médicament allergène est lu par
 `ReferenceDataDao::medicationSubstances()`. Le statut `ANNULE` d'un soin n'a pas de constante dans `Appointment` :
 il est écrit en SQL par `AppointmentDao` et `CarePlanDao`.
 
@@ -720,6 +918,34 @@ classDiagram
     class MedicationDao {
         +findById(id) ?Medication
     }
+    class ClinicalImpressionDao {
+        +findById(idClinicalImpression) ?ClinicalImpression
+        +findByEpisodeOfCare(idEpisodeOfCare) array
+        +insert(impression) string
+        +update(impression) bool
+        +markRemoved(idClinicalImpression) bool
+    }
+    class ClinicalObservationDao {
+        +findById(idClinicalObservation) ?ClinicalObservation
+        +findByClinicalImpression(idClinicalImpression) array
+        +insert(observation, idClinicalImpression) string
+        +update(observation) bool
+        +markRemoved(idClinicalObservation) bool
+    }
+    class ShockRoomAssessmentDao {
+        +findByClinicalImpression(idClinicalImpression) ?ShockRoomAssessment
+        +insert(assessment, idClinicalImpression) string
+        +update(assessment) bool
+    }
+    class EpisodeDiagnosisDao {
+        +findById(idEpisodeDiagnosis) ?EpisodeDiagnosis
+        +findByEpisodeOfCare(idEpisodeOfCare) array
+        +findByClinicalImpression(idClinicalImpression) array
+        +pathologies() array
+        +insert(diagnosis) string
+        +updateStatus(idEpisodeDiagnosis, status, notes) bool
+        +markRemoved(idEpisodeDiagnosis) bool
+    }
     class Transaction {
         +run(treatment) mixed
     }
@@ -741,7 +967,20 @@ classDiagram
     ReferenceDataDao ..> Practitioner
     ActivityDefinitionDao ..> ActivityDefinition
     MedicationDao ..> Medication
+    ClinicalImpressionDao *-- ClinicalObservationDao
+    ClinicalImpressionDao *-- ShockRoomAssessmentDao
+    ClinicalImpressionDao ..> ClinicalImpression
+    ClinicalObservationDao ..> ClinicalObservation
+    ShockRoomAssessmentDao ..> ShockRoomAssessment
+    EpisodeDiagnosisDao ..> EpisodeDiagnosis
+    EpisodeDiagnosisDao ..> Pathology
 ```
+
+Évaluations patient (sprint 1) : `ClinicalImpressionDao` crée lui-même ses deux DAO de fiches et de bilan (même PDO)
+et enregistre l'évaluation, ses fiches et son bilan dans une seule transaction. Les quatre DAO calculent leurs ids
+`VARCHAR(20)` par `MAX(CAST(id AS UNSIGNED)) + 1 … FOR UPDATE` et ne lisent que les lignes actives
+(`removedAt IS NULL`, celui de l'évaluation pour un bilan). Aucun service ni contrôleur ne les utilise encore : la
+saisie (formulaires, authentification factice, traces `AuditEvent`) est l'objet des sprints suivants.
 
 ### Services de l'admission et des patients
 
@@ -1067,7 +1306,8 @@ classDiagram
   (`CareTeamService`). Bornes à confirmer avec le service.
 - **Validation médicale** (RG5) : une ordonnance est validée dans son ensemble par un praticien dont le rôle a
   `canValidate` ; seules les lignes validées et non arrêtées apparaissent au dossier et à l'agenda.
-- **Suppression** : logique en principe (`removedAt`, voir README, « Conventions ») : `Patient`, `CareTeam`.
+- **Suppression** : logique en principe (`removedAt`, voir README, « Conventions ») : `Patient`, `CareTeam`,
+  `ClinicalImpression`, `ClinicalObservation`, `EpisodeDiagnosis` (le bilan de déchocage suit son évaluation).
   `AllergyIntolerance` n'a pas de `removedAt` : le retrait d'une allergie est physique (dette tracée, décision du
   2026-10-21). Les lignes de prescription s'arrêtent (`stoppedAt`) et les soins s'annulent (`ANNULE`) : rien
   n'est supprimé.
@@ -1085,6 +1325,12 @@ classDiagram
 - **Champs complémentaires** : catalogue déclaratif `RecordFields` (champ = colonne = clé de domaine), liste blanche
   pour l'admission et l'édition en ligne ; échelles cliniques sourcées (`ClinicalScales`), formules sourcées
   (`DerivedMeasuresService`).
+- **Évaluations patient** (sprint 1, 2026-11-18) : une évaluation (`ClinicalImpression`, HL7 FHIR ClinicalImpression)
+  regroupe les fiches de suivi par système (`ClinicalObservation`, FHIR Observation) et, après SMUR / SAMU, un bilan
+  de déchocage (`ShockRoomAssessment`) ; les diagnostics du séjour (`EpisodeDiagnosis`, FHIR Encounter.diagnosis)
+  pointent le référentiel `Pathology`, qui mène aux protocoles. Les données générales d'examen (poids, taille, IMC)
+  restent sur le séjour. Listes et scores sourcés dans `ClinicalScales` ; les listes sans échelle de référence
+  (rythme ECG, support ventilatoire, examen abdominal) sont à faire valider par le service.
 - **Schéma** : toute modification se fait dans `schema.sql` (base recréée) ; les fichiers `migrations/` mettent à
   jour une base existante, dans l'ordre de leurs noms, et se rejouent sans erreur.
 
@@ -1103,9 +1349,11 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | ASA | Classification de l'état de santé d'un patient avant une anesthésie, de I (bonne santé) à VI, publiée par l'American Society of Anesthesiologists. Valeurs et source dans `ClinicalScales`. |
 | Authentification factice | Fenêtre qui demande de choisir un praticien dans une liste et de saisir un mot de passe, mais qui ne vérifie pas ce mot de passe. Elle remplace provisoirement une vraie authentification ; le nom choisi est enregistré dans la trace. |
 | AUTO_INCREMENT | Numérotation automatique d'une clé par la base. Seules `AuditEvent` et `CareTeam` l'utilisent ; les autres identifiants sont calculés par l'application (`MAX + 1` dans une transaction verrouillée). |
+| AVPU | Échelle rapide de l'état de conscience : A éveillé (*alert*), V répond à la voix, P répond à la douleur, U aucune réponse. Liste de la fiche neurologique (`ClinicalScales::OBSERVATION_LISTS`). |
 | B3 (écran B3) | Numéro, dans le cahier des charges, de l'écran de saisie des prescriptions (`/care-plans/new`). |
 | Bandeau patient | Zone fixée en haut de chaque écran de séjour : identité du patient, séjour, poids, taille et allergies (règle RG2). |
 | BDD | Base de données. Le « responsable BDD » est le membre de l'équipe qui décide des changements de `database/schema.sql`. |
+| Bilan de déchocage | Fiche remplie pour un patient admis après une intervention du SMUR ou du SAMU (table `ShockRoomAssessment`) : grade à l'arrivée, prise en charge SMUR, examen clinique au déchocage, bilans, avis extérieurs, score IGS II. Au plus un par évaluation de type `SHOCK_ROOM`. |
 | camelCase | Écriture des noms composés en collant les mots, le premier en minuscule et les suivants avec une majuscule (`lastName`, `admissionDate`). Utilisée pour les colonnes SQL et les variables. |
 | CDN | Content Delivery Network : serveur externe qui fournit des fichiers communs (polices, bibliothèques). AURA n'en utilise aucun : tout est dans le dépôt, car la VM n'a pas accès à internet. |
 | CI | Intégration continue : vérifications lancées automatiquement par GitHub Actions à chaque push sur `main` et à chaque pull request (syntaxe, style, schéma, tests). Fichier `.github/workflows/ci.yml`. |
@@ -1122,22 +1370,31 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | CSS | Langage de mise en forme des pages web. AURA a un seul fichier : `public/css/style.css`. |
 | DAO | Data Access Object : classe de `src/Dao/` qui lit et écrit une table. C'est le seul endroit où apparaissent les noms de colonnes SQL. |
 | DCI | Dénomination commune internationale : nom générique du principe actif d'un médicament (paracétamol plutôt qu'un nom de marque). Colonne `Medication.inn`. |
+| Déchocage | Salle d'accueil des urgences vitales (polytraumatisé, choc) où le patient est stabilisé à son arrivée. Une évaluation de type déchocage (`ClinicalImpression::KIND_SHOCK_ROOM`) porte un bilan de déchocage. |
 | Déclaration du décès | Action réservée à un médecin (authentification factice) : le patient est marqué décédé, le séjour en cours se termine à l'heure du décès et ses soins encore prévus sont annulés (`POST /sejour/deces`). |
+| DER | Dépense énergétique au repos : besoin calorique quotidien du patient (kcal/j), corrigé par un niveau d'agression (facteur correctif, 1 = aucune agression). Champs `restingEnergyExpenditure` et `aggressionFactor` de l'évaluation. |
+| Diagnostic du séjour | Pathologie du référentiel retenue, suspectée, résolue ou écartée pendant un séjour (table `EpisodeDiagnosis`, HL7 FHIR Encounter.diagnosis), éventuellement posée lors d'une évaluation. Une pathologie n'a qu'un diagnostic actif par séjour. |
 | Diagramme de classes | Schéma des classes du code, de leurs méthodes publiques et de leurs dépendances. |
 | Diagramme entité-association (ER) | Schéma des tables, de leurs colonnes et des clés qui les relient. |
 | DMP | Dossier médical partagé : dossier de santé national d'un patient en France. AURA ne stocke que son identifiant, saisi à la main. |
 | Édition en ligne | Modification d'un seul champ du dossier directement dans la page (crayon, puis « Confirmer »). Elle passe par l'authentification factice d'un médecin et est tracée. |
+| eFAST | *Extended Focused Assessment with Sonography for Trauma* : échographie rapide du traumatisé au déchocage (épanchements, pneumothorax). Champ `efastResult` du bilan de déchocage. |
 | Entité immuable | Objet de `src/Domain/` qui représente une ligne de données (patient, séjour…). Ses valeurs sont fixées à la création et lues par des accesseurs (`get…()`). |
 | Équipe de rotation | Groupe de soignants composé pour une rotation donnée, avec les patients dont il a la charge. Un patient n'appartient qu'à une équipe par rotation. |
+| Évaluation médicale | Examen d'un patient par un médecin pendant son séjour (table `ClinicalImpression`, ressource HL7 FHIR ClinicalImpression) : note générale, fiches de suivi par système, DER, conclusion et orientation. Classique (`STANDARD`) ou déchocage (`SHOCK_ROOM`). |
+| Fiche de suivi | Élément d'une évaluation médicale pour un système (sédation, neurologique, cardiovasculaire, hémodynamique, respiratoire, abdominal, uro-rénal) : une valeur de liste normalisée, une note et, selon le système, l'interprétation d'un examen (ECG, échocardiographie, Rx thoracique). Table `ClinicalObservation` (ressource HL7 FHIR Observation). |
 | Fuseau horaire | Zone d'heure légale. AURA fixe Europe/Paris, quel que soit le réglage de PHP. |
 | Gabarit | Fichier PHP de `src/View/` qui produit le HTML d'une page ou d'un composant à partir des variables qu'il reçoit. |
 | GET, POST | Méthodes HTTP. GET lit une page sans rien modifier ; POST envoie des données à enregistrer. |
 | GHS | Groupe homogène de séjours : catégorie de tarification d'un séjour hospitalier en France. Un médicament « hors GHS » est facturé en plus de ce tarif ; la colonne `offGhsReason` garde le motif. |
 | GIR | Groupe iso-ressources de la grille AGGIR : niveau de dépendance d'une personne, de GIR 1 (dépendance la plus forte) à GIR 6 (autonome). |
+| Glasgow (score de) | Score de conscience de 3 (coma profond) à 15 (normal), somme des réponses oculaire (1 à 4), verbale (1 à 5) et motrice (1 à 6). Bornes contrôlées par la base (`chk_shockroom_glasgow`). |
+| Hémocue | Mesure de l'hémoglobine sur une goutte de sang capillaire, en g/dL, faite au lit du patient ou par le SMUR. Deux mesures dans le bilan de déchocage. |
 | HL7 | Health Level Seven : famille de normes d'échange de données de santé. AURA reprend les noms anglais des ressources de sa norme FHIR (`Patient`, `EpisodeOfCare`, `CarePlan`, `Appointment`…) pour ses tables et classes. |
 | Horizon de planification | Nombre de jours à l'avance pour lesquels les soins planifiés sont créés : 7 jours, à l'enregistrement d'une ordonnance puis chaque nuit par `bin/generate-agenda.php`. |
 | HTML | Langage des pages web. Les vues PHP de `src/View/` produisent du HTML. |
 | HTTP | Protocole d'échange entre le navigateur et le serveur web. Un code de réponse dit le résultat : 200 réussi, 303 redirection, 400 requête invalide, 403 refusé, 404 introuvable, 409 conflit, 422 saisie invalide. |
+| IGS II | Indice de gravité simplifié (SAPS II en anglais) : score de gravité d'un patient de réanimation, de 0 à 163 points, calculé sur les 24 premières heures. Champ `igs2Score` du bilan de déchocage. |
 | Injection de dépendances | Une classe reçoit à sa construction les objets dont elle a besoin (DAO, services) au lieu de les créer elle-même. Dans AURA, ce câblage est fait à la main dans `public/index.php`. |
 | INS | Identité nationale de santé : identifiant national d'un patient en France. AURA stocke le « matricule INS » saisi, sans le vérifier. |
 | INTERMACS | Classification de l'insuffisance cardiaque avancée en sept profils, du profil 1 (choc cardiogénique critique) au profil 7. |
@@ -1145,6 +1402,7 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | Jeton CSRF | Valeur secrète liée à la session du navigateur, envoyée avec chaque POST (champ `csrf` ou en-tête `X-CSRF-Token`). Sans jeton valide, le serveur refuse l'écriture (403). |
 | JJ/MM/AAAA | Format de saisie des dates (jour, mois, année), converti par le serveur (`DateInput`). |
 | JSON | Format texte d'échange de données (`{"ok": true}`), utilisé par les réponses aux requêtes envoyées en JavaScript. |
+| KDIGO | *Kidney Disease: Improving Global Outcomes* : recommandations internationales qui classent l'insuffisance rénale aiguë en stades 1 à 3. Liste de la fiche uro-rénale. |
 | Knaus | Échelle de l'état de santé antérieur d'un patient admis en réanimation (activité et suivi médical des six mois précédents), classes A à D. |
 | Ligne arrêtée | Ligne de prescription stoppée par un médecin (`stoppedAt`) : ses soins encore prévus sont annulés, rien n'est effacé. |
 | Ligne de prescription | Élément d'une ordonnance : un médicament (`MedicationRequest`) ou un soin (`ServiceRequest`), avec ses dates et sa fréquence. |
@@ -1164,6 +1422,7 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | OpenEMR | Logiciel libre de dossier patient. AURA n'y est pas connecté : c'est hors périmètre. |
 | Ordonnance | Ensemble de lignes de prescription enregistrées ensemble pour un séjour (table `CarePlan`). Elle est validée en bloc par un médecin. |
 | Panneau du lit | Zone à côté du tableau des lits de l'agenda du service, qui détaille le patient choisi (`?sejour=`) : allergies, référent, soins de la rotation avec leurs actions. |
+| Pathologie | Entrée du référentiel des maladies (table `Pathology`) : ce que retient un diagnostic de séjour et ce à quoi s'applique un protocole. |
 | PDO | PHP Data Objects : interface de PHP pour parler à une base de données. AURA ouvre une seule connexion PDO (`Database::get()`), seulement quand une page en a besoin. |
 | PHP | Langage du serveur (version 8.4). AURA n'utilise aucun framework. |
 | Plan blanc | Plan de crise d'un hôpital français face à un afflux massif de victimes. Le champ `whitePlan` n'est rempli que dans ce cas. |
@@ -1171,6 +1430,7 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | Prescription | Décision d'un prescripteur de donner un médicament ou de faire un soin à un patient, avec une date de début, une fréquence éventuelle et une date de fin facultative. Chaque ligne de prescription génère des soins planifiés. |
 | Protocole | Modèle d'ordonnance (table `PlanDefinition`) : un groupe de lignes de prescription types, choisi pour pré-remplir une nouvelle ordonnance. |
 | Query string | Partie d'une adresse après le `?`, qui porte des paramètres (`/sejour?id=1`). AURA y passe tous les identifiants. |
+| RASS | *Richmond Agitation-Sedation Scale* : échelle d'agitation et de sédation de +4 (combatif) à -5 (non réveillable). Liste de la fiche de sédation. |
 | Rattachement | Ouverture d'un séjour sur un patient déjà présent dans la base, choisi par l'utilisateur, au lieu de créer un nouveau patient. Il est tracé. |
 | Redirection après POST | Après une écriture réussie, le serveur répond par une redirection (303) vers une page GET. Recharger la page n'envoie donc pas une seconde fois les données. |
 | Référentiel | Liste de valeurs de référence communes (services, médicaments, substances, types de soin, praticiens), chargée par `database/test.sql`. |
@@ -1181,6 +1441,7 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | Séjour | Passage d'un patient dans le service, de l'admission à la sortie ou au décès (table `EpisodeOfCare`). Un patient n'a qu'un séjour en cours à la fois ; chaque séjour a un numéro unique. |
 | Service (classe) | Classe de `src/Service/` qui porte les règles métier. Sa validation est pure (sans base ni requête), ses écritures passent par une transaction. À distinguer du service hospitalier (réanimation). |
 | SI | Système d'information. AURA est un « SI miroir » : il reproduit, pour le projet, les fonctions du système d'information d'un service de réanimation. |
+| SMUR, SAMU | Service mobile d'urgence et de réanimation (équipe médicale qui intervient hors de l'hôpital) et service d'aide médicale urgente (régulation du 15). Un patient qu'ils amènent passe par le déchocage. |
 | Soin en retard | Soin planifié non validé dont l'heure prévue est passée (règle RG8). Le retard est calculé à l'affichage, jamais enregistré, et ces soins sont épinglés en tête de l'agenda. |
 | Soin planifié | Occurrence datée d'une ligne de prescription : une administration ou un acte à faire à une heure donnée (table `Appointment`). Statuts : prévu, réalisé, non effectué, annulé. |
 | SQL | Langage des bases de données relationnelles (création de tables, lectures, écritures). |
@@ -1188,6 +1449,7 @@ Les acronymes et les termes techniques ou métier employés dans ce document.
 | Suppression logique | La ligne n'est pas effacée : une date est écrite dans `removedAt` et les DAO l'ignorent ensuite. L'historique reste en base (traçabilité). |
 | Traçabilité, trace | Enregistrement de qui a fait quoi et quand (table `AuditEvent` et colonnes d'horodatage), exigé par la règle RG10. |
 | Transaction | Groupe d'écritures en base qui réussissent toutes ou sont toutes annulées. Dans AURA : `Transaction::run()`. |
+| TRENAU (grade) | Grade de gravité d'un traumatisé à son arrivée, défini par le réseau de traumatologie TRENAU : A (détresse vitale non stabilisée), B (détresse stabilisée ou lésion grave), C (cinétique violente sans détresse). Champ `arrivalGrade` du bilan de déchocage. |
 | URL | Adresse d'une page web (`http://localhost:8000/sejour?id=1`). |
 | Validation d'un soin | Déclaration qu'un soin planifié a été réalisé ou non effectué, avec le soignant, l'heure de réalisation et l'heure de saisie (règle RG7). Possible une seule fois, au plus tard jusqu'à la fin de la rotation en cours. |
 | Validation d'une ordonnance | Acceptation d'une ordonnance par un médecin habilité (rôle avec `canValidate`, règle RG5). Une ordonnance faite par un prescripteur sans ce droit (urgence, paramédicale) reste « non validée » jusque-là ; celle d'un médecin habilité est validée d'office. |

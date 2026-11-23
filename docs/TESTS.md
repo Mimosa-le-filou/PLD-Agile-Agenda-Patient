@@ -18,19 +18,19 @@ Chaque règle est testée au niveau le plus bas qui suffit à la prouver.
 | Sur la vraie base | `tests/Dao/*`, `tests/Service/*IntegrationTest.php` | SQL des DAO, contraintes de `schema.sql`, transactions, enchaînements service + DAO | un simulacre ne voit ni une colonne renommée ni une contrainte qui bloque (cas réel : la PR #52 a corrigé deux DAO cassés par un renommage) |
 | HTTP de bout en bout | `tests/Http` | parcours réels : session, jeton CSRF, POST, redirections, codes 400/404 | vérifie le câblage de `public/index.php`, que les autres niveaux ne voient pas |
 
-Répartition (245 tests) :
+Répartition (278 tests) :
 
 | Dossier | Tests | Dont sur base |
 | --- | --- | --- |
 | `tests/Core` | 9 | 0 |
 | `tests/Controller` | 10 | 0 |
-| `tests/Domain` | 6 | 0 |
-| `tests/Dao` | 35 | 35 |
+| `tests/Domain` | 11 | 0 |
+| `tests/Dao` | 63 | 63 |
 | `tests/Service` | 160 | 36 |
 | `tests/View` | 5 | 0 |
 | `tests/Http` | 20 | 20 |
 
-Les deux suites de `phpunit.xml.dist` : `aura` (tout sauf `tests/Http`, 225 tests) et `http` (`tests/Http`,
+Les deux suites de `phpunit.xml.dist` : `aura` (tout sauf `tests/Http`, 258 tests) et `http` (`tests/Http`,
 20 tests).
 
 ### Écrire un test
@@ -197,6 +197,7 @@ Autres garanties essentielles :
 | Rotations 6 h, 14 h, 22 h (`CareTeam::SHIFTS`), une seule équipe par rotation pour un patient | `CareTeamServiceTest`, `CareTeamDaoTest`, `SchemaConstraintsTest` (rotation inconnue, nom d'équipe), `WorkflowsHttpTest::testTeamIsComposedAndRemovedForAShift` |
 | Décès : termine le séjour en cours, annule les soins suivants, heure invalide refusée | `RecordSectionIntegrationTest` (décès, heure de décès ou de sortie invalide), `RecordEditServiceTest::testDeathIsRefusedWithoutAnIdentifiedDoctor`, `RecordControllerTest::testDeathIsNeverChangedInline`, `WorkflowsHttpTest::testDeclaringDeathNeedsCsrfAndEndsTheStay` |
 | Édition en ligne : authentification factice exigée, séjour affiché seulement | `RecordControllerTest`, `RecordEditServiceTest`, `RecordSectionIntegrationTest::testPartNeedsTheFactitiousAuthenticationOfADoctor`, `WorkflowsHttpTest::testInlineEditNeedsFactitiousDoctorAuthenticationAndTracesTheDoctor` |
+| Évaluations patient (sprint 1) : évaluation enregistrée avec ses fiches et son bilan de déchocage, bilan refusé sur une évaluation classique, une fiche active par système, un diagnostic actif par pathologie, Glasgow 3 à 15 et IGS II 0 à 163, lignes retirées (`removedAt`) conservées mais plus lues, ordonnance reliée à son évaluation | `EvaluationDaoTest`, `SchemaConstraintsTest` (cas « Évaluation », « Fiche de suivi », « Déchocage », « Diagnostic »), `ClinicalImpressionTest` (listes et bornes de `ClinicalScales`) |
 | Ligne arrêtée | `CarePlanDaoTest::testStoppingALineCancelsItsFutureScheduledCareOnly`, `AppointmentIntegrationTest::testStoppedLineAcceptsOnlyCareDoneBeforeTheStop`, `AgendaServiceTest`, `WorkflowsHttpTest::testStoppingALineNeedsCsrfAndADoctorPasswordAndCancelsItsFutureCare` |
 | CSRF sur les POST | `CsrfTest`, `RecordControllerTest::testWithoutCsrfTokenNothingIsWritten`, `WorkflowsHttpTest` (admission, soin, équipe, arrêt d'une ligne, décès : refusés sans jeton) |
 | Échappement HTML, UTF-8 invalide | `ViewTest`, `ComponentsRenderTest`, `PagesRenderTest`, `PagesHttpTest` (octet UTF-8 invalide : 400) |

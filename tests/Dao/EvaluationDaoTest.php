@@ -21,7 +21,8 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 
 /**
- * DAO des évaluations patient (sprint 1) : ClinicalImpressionDao, ClinicalObservationDao, ShockRoomAssessmentDao,
+ * DAO des évaluations patient (modèle v2, sprint 2) : ClinicalImpressionDao, ClinicalObservationDao,
+ * ShockRoomAssessmentDao,
  * EpisodeDiagnosisDao. Insertion puis relecture, mise à jour, et isolation des lignes supprimées logiquement
  * (removedAt) : elles restent en base mais ne sont plus lues. Données de database/test.sql : séjour 1, praticien
  * PRA01, pathologies PTH01 à PTH03.
@@ -63,12 +64,16 @@ final class EvaluationDaoTest extends TestCase
             idEpisodeOfCare: 1,
             idPractitioner: 'PRA01',
             kind: ClinicalImpression::KIND_STANDARD,
-            evaluatedAt: $at,
-            generalNote: 'Patient stable',
+            effectiveDateTime: $at,
+            description: 'Patient stable',
             aggressionFactor: 1.3,
             restingEnergyExpenditure: 1650,
-            conclusion: 'Sepsis d\'origine urinaire',
+            researchProtocols: 'Étude ZZ-SEPSIS',
+            summary: 'Sepsis d\'origine urinaire',
+            paraclinicalProposal: 'ECBU, hémocultures',
+            therapeuticProposal: 'Antibiothérapie probabiliste',
             orientation: 'Maintien en réanimation',
+            details: ['echocardiography' => 'FEVG visuelle 35-40 %'],
             observations: [
                 // Volontairement dans le désordre : la lecture suit l'ordre de l'écran.
                 $this->observation(ClinicalObservation::CATEGORY_URORENAL, '1', null, $at),
@@ -93,8 +98,13 @@ final class EvaluationDaoTest extends TestCase
         self::assertSame(1, $saved->getIdEpisodeOfCare());
         self::assertSame('PRA01', $saved->getIdPractitioner());
         self::assertFalse($saved->isShockRoom());
-        self::assertEquals($at, $saved->getEvaluatedAt());
-        self::assertSame('Patient stable', $saved->getGeneralNote());
+        self::assertEquals($at, $saved->getEffectiveDateTime());
+        self::assertSame('Patient stable', $saved->getDescription());
+        self::assertSame('Sepsis d\'origine urinaire', $saved->getSummary());
+        self::assertSame('Étude ZZ-SEPSIS', $saved->getResearchProtocols());
+        self::assertSame('ECBU, hémocultures', $saved->getParaclinicalProposal());
+        self::assertSame('Antibiothérapie probabiliste', $saved->getTherapeuticProposal());
+        self::assertSame(['echocardiography' => 'FEVG visuelle 35-40 %'], $saved->getDetails(), 'JSON relu');
         self::assertSame(1.3, $saved->getAggressionFactor());
         self::assertSame(1650, $saved->getRestingEnergyExpenditure());
         self::assertSame('Maintien en réanimation', $saved->getOrientation());
@@ -106,8 +116,8 @@ final class EvaluationDaoTest extends TestCase
         );
         $cardio = $saved->getObservations()[1];
         self::assertSame($id, $cardio->getIdClinicalImpression(), 'fiche rattachée à l\'évaluation créée');
-        self::assertSame('SINUS', $cardio->getSelectedValue());
-        self::assertSame('ECG : sinusal régulier, 70 bpm', $cardio->getExamInterpretation());
+        self::assertSame('SINUS', $cardio->getValueCodeableConcept());
+        self::assertSame('ECG : sinusal régulier, 70 bpm', $cardio->getInterpretation());
 
         $ofEpisode = $this->impressions->findByEpisodeOfCare(1);
         self::assertContains($id, $this->impressionIds($ofEpisode));
@@ -127,8 +137,14 @@ final class EvaluationDaoTest extends TestCase
         self::assertSame(11.5, $assessment->getHemocue1());
         self::assertSame(2.5, $assessment->getCapillaryRefillSeconds());
         self::assertSame(1500, $assessment->getCrystalloidsVolumeMl());
-        self::assertSame('3 orifices balistiques', $assessment->getLesionAssessment());
-        self::assertSame(48, $assessment->getIgs2Score());
+        self::assertSame('3 orifices balistiques', $assessment->getCutaneousWounds());
+        self::assertSame(34, $assessment->getIssScore());
+        self::assertSame(
+            [['region' => 'Thorax', 'lesion' => 'Pneumothorax droit']],
+            $assessment->getLesionDetails(),
+            'bilan lésionnel JSON relu'
+        );
+        self::assertSame(150, $assessment->getIgs2Score(), 'IGS II au-delà de 127 (TINYINT UNSIGNED)');
         self::assertNull($assessment->getOtherConsults());
     }
 
@@ -174,7 +190,7 @@ final class EvaluationDaoTest extends TestCase
             'PRA01',
             ClinicalImpression::KIND_SHOCK_ROOM,
             $later,
-            conclusion: 'Polytraumatisé stabilisé'
+            summary: 'Polytraumatisé stabilisé'
         )));
         $observation = $saved->getObservations()[0];
         $observations = new ClinicalObservationDao($this->pdo);
@@ -195,10 +211,10 @@ final class EvaluationDaoTest extends TestCase
 
         $reread = $this->impressions->findById($id);
         self::assertNotNull($reread);
-        self::assertEquals($later, $reread->getEvaluatedAt());
-        self::assertSame('Polytraumatisé stabilisé', $reread->getConclusion());
-        self::assertNull($reread->getGeneralNote(), 'tout l\'en-tête est réécrit');
-        self::assertSame('NIV', $reread->getObservations()[0]->getSelectedValue());
+        self::assertEquals($later, $reread->getEffectiveDateTime());
+        self::assertSame('Polytraumatisé stabilisé', $reread->getSummary());
+        self::assertNull($reread->getDescription(), 'tout l\'en-tête est réécrit');
+        self::assertSame('NIV', $reread->getObservations()[0]->getValueCodeableConcept());
         self::assertSame(13, $reread->getShockRoomAssessment()?->getGlasgowScore());
         self::assertNull($reread->getShockRoomAssessment()?->getArrivalGrade());
     }
@@ -244,7 +260,7 @@ final class EvaluationDaoTest extends TestCase
             $id,
             $first->getCategory(),
             new DateTimeImmutable('2030-03-01 11:00:00'),
-            notes: 'Nouvelle fiche du même système'
+            note: 'Nouvelle fiche du même système'
         ));
         self::assertNotSame($idFirst, $idSecond);
         self::assertSame(
@@ -266,31 +282,66 @@ final class EvaluationDaoTest extends TestCase
             null,
             1,
             'PTH01',
-            EpisodeDiagnosis::STATUS_SUSPECTED,
             $at,
-            $idImpression,
-            'Foyer à préciser'
+            idClinicalImpression: $idImpression,
+            note: 'Foyer à préciser'
         ));
         $saved = $diagnoses->findById($id);
         self::assertNotNull($saved);
         self::assertSame('PTH01', $saved->getIdPathology());
         self::assertSame($idImpression, $saved->getIdClinicalImpression());
-        self::assertEquals($at, $saved->getDiagnosedAt());
-        self::assertFalse($saved->isActive(), 'suspecté : pas encore retenu');
+        self::assertEquals($at, $saved->getRecordedDate());
+        self::assertSame(EpisodeDiagnosis::CLINICAL_ACTIVE, $saved->getClinicalStatus(), 'valeur par défaut');
+        self::assertSame(EpisodeDiagnosis::VERIFICATION_PROVISIONAL, $saved->getVerificationStatus());
+        self::assertTrue($saved->isActive(), 'suspecté mais en cours');
         self::assertSame([$id], $this->ids($diagnoses->findByClinicalImpression($idImpression)));
         self::assertContains($id, $this->ids($diagnoses->findByEpisodeOfCare(1)));
 
-        self::assertTrue($diagnoses->updateStatus($id, EpisodeDiagnosis::STATUS_ACTIVE, 'Pyélonéphrite'));
+        self::assertTrue($diagnoses->updateStatus(
+            $id,
+            EpisodeDiagnosis::CLINICAL_ACTIVE,
+            EpisodeDiagnosis::VERIFICATION_REFUTED,
+            'Écarté'
+        ));
+        self::assertFalse($diagnoses->findById($id)?->isActive(), 'diagnostic écarté');
+        self::assertTrue($diagnoses->updateStatus(
+            $id,
+            EpisodeDiagnosis::CLINICAL_ACTIVE,
+            EpisodeDiagnosis::VERIFICATION_CONFIRMED,
+            'Pyélonéphrite'
+        ));
         self::assertTrue($diagnoses->findById($id)?->isActive());
 
         self::assertTrue($diagnoses->markRemoved($id));
         self::assertFalse($diagnoses->markRemoved($id), 'déjà retiré');
         self::assertNull($diagnoses->findById($id));
         self::assertNotContains($id, $this->ids($diagnoses->findByEpisodeOfCare(1)));
-        self::assertFalse($diagnoses->updateStatus($id, EpisodeDiagnosis::STATUS_RESOLVED, null));
+        self::assertFalse($diagnoses->updateStatus(
+            $id,
+            EpisodeDiagnosis::CLINICAL_RESOLVED,
+            EpisodeDiagnosis::VERIFICATION_CONFIRMED,
+            null
+        ));
 
-        $again = $diagnoses->insert(new EpisodeDiagnosis(null, 1, 'PTH01', EpisodeDiagnosis::STATUS_ACTIVE, $at));
+        $again = $diagnoses->insert(new EpisodeDiagnosis(null, 1, 'PTH01', $at));
         self::assertContains($again, $this->ids($diagnoses->findByEpisodeOfCare(1)), 'pathologie ressaisie');
+    }
+
+    public function testOnlyOneActiveShockRoomAssessmentPerEpisode(): void
+    {
+        $first = $this->impressions->insert($this->shockRoomImpression());
+        try {
+            $this->impressions->insert($this->shockRoomImpression());
+            self::fail('Un second bilan de déchocage actif sur le séjour doit être refusé (UC2, shockRoomKey).');
+        } catch (\PDOException $e) {
+            self::assertSame(1062, $e->errorInfo[1] ?? null);
+            self::assertStringContainsString('uq_clinicalimpression_shockroom', $e->getMessage());
+        }
+        self::assertSame([$first], $this->impressionIds($this->impressions->findByEpisodeOfCare(1)), 'rien d\'écrit');
+
+        // Retirer le bilan (UC8) libère la place : un nouveau bilan peut être saisi.
+        self::assertTrue($this->impressions->markRemoved($first));
+        self::assertNotSame($first, $this->impressions->insert($this->shockRoomImpression()));
     }
 
     public function testPathologiesAreListedAlphabetically(): void
@@ -333,8 +384,8 @@ final class EvaluationDaoTest extends TestCase
             idEpisodeOfCare: 1,
             idPractitioner: 'PRA01',
             kind: ClinicalImpression::KIND_SHOCK_ROOM,
-            evaluatedAt: $at,
-            generalNote: 'Admission après SMUR',
+            effectiveDateTime: $at,
+            description: 'Admission après SMUR',
             observations: [$this->observation(ClinicalObservation::CATEGORY_RESPIRATORY, 'INVASIVE', null, $at)],
             shockRoomAssessment: new ShockRoomAssessment(
                 idShockRoomAssessment: null,
@@ -344,19 +395,21 @@ final class EvaluationDaoTest extends TestCase
                 hemocue1: 11.5,
                 crystalloidsVolumeMl: 1500,
                 capillaryRefillSeconds: 2.5,
-                lesionAssessment: '3 orifices balistiques',
-                igs2Score: 48
+                cutaneousWounds: '3 orifices balistiques',
+                issScore: 34,
+                lesionDetails: [['region' => 'Thorax', 'lesion' => 'Pneumothorax droit']],
+                igs2Score: 150
             )
         );
     }
 
     private function observation(
         string $category,
-        ?string $selectedValue,
-        ?string $notes,
+        ?string $valueCodeableConcept,
+        ?string $note,
         DateTimeImmutable $at
     ): ClinicalObservation {
-        return new ClinicalObservation(null, '', $category, $at, $selectedValue, $notes);
+        return new ClinicalObservation(null, '', $category, $at, $valueCodeableConcept, $note);
     }
 
     /**

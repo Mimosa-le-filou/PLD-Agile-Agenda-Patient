@@ -25,6 +25,9 @@ $icons = [
         . '<line x1="12" x2="12.01" y1="16" y2="16"/>',
     'circle-check' => '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
     'circle-x' => '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+    'clipboard-list' => '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>'
+        . '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'
+        . '<path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
     'clock' => '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     'clock-alert' => '<path d="M12 6v6l4 2"/><path d="M20 12v5"/><path d="M20 21h.01"/>'
         . '<path d="M21.25 8.2A10 10 0 1 0 16 21.16"/>',
@@ -47,6 +50,7 @@ $icons = [
         . '<path d="m9 9 6 6"/>',
     'pen-line' => '<path d="M13 21h8"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83'
         . 'l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+    'plus' => '<path d="M5 12h14"/><path d="M12 5v14"/>',
     'printer' => '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>'
         . '<path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
     'search' => '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',

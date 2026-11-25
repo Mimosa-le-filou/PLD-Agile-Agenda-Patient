@@ -23,8 +23,9 @@ class ClinicalImpressionDao
 {
     private const SQL_DATE_FORMAT = 'Y-m-d H:i:s';
 
-    private const COLUMNS = 'idClinicalImpression, idEpisodeOfCare, idPractitioner, kind, evaluatedAt, generalNote,
-        aggressionFactor, restingEnergyExpenditure, conclusion, orientation, recordedAt, removedAt';
+    private const COLUMNS = 'idClinicalImpression, idEpisodeOfCare, idPractitioner, kind, effectiveDateTime,
+        description, aggressionFactor, restingEnergyExpenditure, researchProtocols, summary, paraclinicalProposal,
+        therapeuticProposal, orientation, details, recordedAt, removedAt';
 
     private ClinicalObservationDao $observations;
 
@@ -60,7 +61,7 @@ class ClinicalImpressionDao
         $stmt = $this->pdo->prepare(
             'SELECT ' . self::COLUMNS . ' FROM ClinicalImpression
              WHERE idEpisodeOfCare = :idEpisodeOfCare AND removedAt IS NULL
-             ORDER BY evaluatedAt DESC, CAST(idClinicalImpression AS UNSIGNED) DESC'
+             ORDER BY effectiveDateTime DESC, CAST(idClinicalImpression AS UNSIGNED) DESC'
         );
         $stmt->execute(['idEpisodeOfCare' => (string) $idEpisodeOfCare]);
 
@@ -73,7 +74,8 @@ class ClinicalImpressionDao
      * (recordedAt, RG10) est remplie par la base.
      *
      * @throws LogicException bilan de déchocage joint à une évaluation classique (STANDARD)
-     * @throws \PDOException contrainte refusée (type inconnu, séjour ou praticien absent, fiche vide ou en double…)
+     * @throws \PDOException contrainte refusée (type inconnu, séjour ou praticien absent, fiche en double, second
+     *                       bilan de déchocage actif sur le séjour…)
      */
     public function insert(ClinicalImpression $impression): string
     {
@@ -85,10 +87,12 @@ class ClinicalImpressionDao
             $id = (string) $this->nextId();
             $this->pdo->prepare(
                 'INSERT INTO ClinicalImpression (idClinicalImpression, idEpisodeOfCare, idPractitioner, kind,
-                                                 evaluatedAt, generalNote, aggressionFactor,
-                                                 restingEnergyExpenditure, conclusion, orientation)
-                 VALUES (:id, :idEpisodeOfCare, :idPractitioner, :kind, :evaluatedAt, :generalNote,
-                         :aggressionFactor, :restingEnergyExpenditure, :conclusion, :orientation)'
+                                                 effectiveDateTime, description, aggressionFactor,
+                                                 restingEnergyExpenditure, researchProtocols, summary,
+                                                 paraclinicalProposal, therapeuticProposal, orientation, details)
+                 VALUES (:id, :idEpisodeOfCare, :idPractitioner, :kind, :effectiveDateTime, :description,
+                         :aggressionFactor, :restingEnergyExpenditure, :researchProtocols, :summary,
+                         :paraclinicalProposal, :therapeuticProposal, :orientation, :details)'
             )->execute([
                 'id' => $id,
                 'idEpisodeOfCare' => (string) $impression->getIdEpisodeOfCare(),
@@ -109,8 +113,9 @@ class ClinicalImpressionDao
     }
 
     /**
-     * Met à jour l'en-tête d'une évaluation active : heure clinique, note générale, DER, conclusion et
-     * orientation. Le séjour, le médecin et le type ne changent pas ; les fiches et le bilan ont leurs
+     * Met à jour l'en-tête d'une évaluation active : heure clinique, évaluation générale, DER, protocoles,
+     * synthèse, propositions, orientation et compléments (details). Le séjour, le médecin et le type ne changent
+     * pas ; les fiches et le bilan ont leurs
      * propres méthodes (ClinicalObservationDao, ShockRoomAssessmentDao). Renvoie false si l'évaluation
      * n'existe pas ou a été retirée.
      *
@@ -125,9 +130,11 @@ class ClinicalImpressionDao
 
         $stmt = $this->pdo->prepare(
             'UPDATE ClinicalImpression
-             SET evaluatedAt = :evaluatedAt, generalNote = :generalNote, aggressionFactor = :aggressionFactor,
-                 restingEnergyExpenditure = :restingEnergyExpenditure, conclusion = :conclusion,
-                 orientation = :orientation
+             SET effectiveDateTime = :effectiveDateTime, description = :description,
+                 aggressionFactor = :aggressionFactor, restingEnergyExpenditure = :restingEnergyExpenditure,
+                 researchProtocols = :researchProtocols, summary = :summary,
+                 paraclinicalProposal = :paraclinicalProposal, therapeuticProposal = :therapeuticProposal,
+                 orientation = :orientation, details = :details
              WHERE idClinicalImpression = :id AND removedAt IS NULL'
         );
         $stmt->execute(['id' => $id] + $this->editableValues($impression));
@@ -160,12 +167,19 @@ class ClinicalImpressionDao
     private function editableValues(ClinicalImpression $impression): array
     {
         return [
-            'evaluatedAt' => $impression->getEvaluatedAt()->format(self::SQL_DATE_FORMAT),
-            'generalNote' => $impression->getGeneralNote(),
+            'effectiveDateTime' => $impression->getEffectiveDateTime()->format(self::SQL_DATE_FORMAT),
+            'description' => $impression->getDescription(),
             'aggressionFactor' => $impression->getAggressionFactor(),
             'restingEnergyExpenditure' => $impression->getRestingEnergyExpenditure(),
-            'conclusion' => $impression->getConclusion(),
+            'researchProtocols' => $impression->getResearchProtocols(),
+            'summary' => $impression->getSummary(),
+            'paraclinicalProposal' => $impression->getParaclinicalProposal(),
+            'therapeuticProposal' => $impression->getTherapeuticProposal(),
             'orientation' => $impression->getOrientation(),
+            // Colonne JSON : NULL plutôt qu'un objet vide.
+            'details' => $impression->getDetails() === []
+                ? null
+                : json_encode($impression->getDetails(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
         ];
     }
 
@@ -190,6 +204,25 @@ class ClinicalImpressionDao
             ->fetchColumn();
     }
 
+    /**
+     * Colonne JSON details vers tableau : seules les clés connues (ClinicalImpression::DETAIL_KEYS) à valeur texte
+     * sont gardées ; NULL ou JSON inattendu donnent [].
+     *
+     * @return array<string, string>
+     */
+    private static function decodeDetails(?string $json): array
+    {
+        $decoded = $json === null ? null : json_decode($json, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return array_filter(
+            array_intersect_key($decoded, ClinicalImpression::DETAIL_KEYS),
+            static fn (mixed $value): bool => is_string($value)
+        );
+    }
+
     /** @param array<string, ?string> $r ligne aux colonnes de COLUMNS */
     private function map(array $r): ClinicalImpression
     {
@@ -200,14 +233,18 @@ class ClinicalImpressionDao
             idEpisodeOfCare: (int) $r['idEpisodeOfCare'],
             idPractitioner: (string) $r['idPractitioner'],
             kind: (string) $r['kind'],
-            evaluatedAt: new DateTimeImmutable((string) $r['evaluatedAt']),
-            generalNote: $r['generalNote'],
+            effectiveDateTime: new DateTimeImmutable((string) $r['effectiveDateTime']),
+            description: $r['description'],
             aggressionFactor: $r['aggressionFactor'] !== null ? (float) $r['aggressionFactor'] : null,
             restingEnergyExpenditure: $r['restingEnergyExpenditure'] !== null
                 ? (int) $r['restingEnergyExpenditure']
                 : null,
-            conclusion: $r['conclusion'],
+            researchProtocols: $r['researchProtocols'],
+            summary: $r['summary'],
+            paraclinicalProposal: $r['paraclinicalProposal'],
+            therapeuticProposal: $r['therapeuticProposal'],
             orientation: $r['orientation'],
+            details: self::decodeDetails($r['details']),
             recordedAt: new DateTimeImmutable((string) $r['recordedAt']),
             removedAt: $r['removedAt'] !== null ? new DateTimeImmutable($r['removedAt']) : null,
             observations: $this->observations->findByClinicalImpression($id),

@@ -3255,7 +3255,8 @@ form.form--columns > .form-row {
     color: var(--accent);
 }
 
-.record-menu a[aria-current="location"] {
+.record-menu a[aria-current="location"],
+.record-menu a[aria-current="page"] {
     background: var(--accent-soft);
     color: var(--accent);
     box-shadow: inset 3px 0 0 var(--accent);
@@ -3638,7 +3639,8 @@ form.form--columns .form-lead > .form-row {
 .form-row input[type="tel"],
 .form-row input[type="email"],
 .form-row input[type="password"],
-.form-row input[type="time"] {
+.form-row input[type="time"],
+.form-row input[type="datetime-local"] {
     min-height: var(--tap);
     box-sizing: border-box;
     width: 100%;
@@ -5076,4 +5078,332 @@ form.form--columns .form-lead > .form-row {
 
 .b3-grid > [data-row][hidden] {
     display: none;
+}
+
+/* ===== Évaluations médicales (sprint 2, UC1 / UC3) ===== */
+
+/* Section « Évaluations et suivi » du dossier du séjour */
+.record-evaluations {
+    margin-top: var(--sp-5);
+}
+
+.record-evaluations__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-2) var(--sp-4);
+    margin-bottom: var(--sp-3);
+}
+
+.record-evaluations__header .record-subtitle {
+    margin: 0;
+}
+
+.record-evaluations__count,
+.record-evaluations__closed,
+.record-evaluations__note {
+    margin: var(--sp-1) 0 0;
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+}
+
+.record-evaluations__saved {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    font-weight: 600;
+}
+
+.record-evaluations__list-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+}
+
+.record-evaluations__list-header h3 {
+    margin: 0;
+    font-size: var(--fs-2);
+}
+
+.record-evaluations__list-header span {
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+}
+
+.evaluation-cards {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.evaluation-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--bg-raised);
+    box-shadow: var(--shadow-soft);
+}
+
+.evaluation-card > summary {
+    display: grid;
+    gap: var(--sp-1);
+    padding: var(--sp-3);
+    cursor: pointer;
+    list-style: none;
+}
+
+.evaluation-card > summary::-webkit-details-marker {
+    display: none;
+}
+
+.evaluation-card > summary:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+}
+
+.evaluation-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-1) var(--sp-3);
+}
+
+.evaluation-card__kind {
+    padding: 2px var(--sp-2);
+    border: 1px solid var(--st-planned-line);
+    border-radius: var(--radius);
+    background: var(--st-planned-bg);
+    color: var(--st-planned-fg);
+    font-size: var(--fs-1);
+    font-weight: 600;
+}
+
+.evaluation-card__kind--shock_room {
+    border-color: var(--st-alert-line);
+    background: var(--st-alert-bg);
+    color: var(--st-alert-fg);
+}
+
+.evaluation-card__author,
+.evaluation-card__score {
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+}
+
+.evaluation-card__title {
+    font-weight: 700;
+}
+
+.evaluation-card__headline {
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+    overflow-wrap: anywhere;
+}
+
+.evaluation-card__body {
+    display: grid;
+    gap: var(--sp-2);
+    padding: 0 var(--sp-3) var(--sp-3);
+}
+
+.evaluation-card__readonly {
+    margin: 0;
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+    font-weight: 600;
+}
+
+.evaluation-card__section {
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius);
+    background: var(--bg-muted);
+}
+
+.evaluation-card__section h4 {
+    margin: 0 0 var(--sp-1);
+    color: var(--accent);
+    font-size: var(--fs-2);
+}
+
+.evaluation-card__section dl {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: var(--sp-1) var(--sp-3);
+    margin: 0;
+}
+
+.evaluation-card__section dt {
+    color: var(--fg-muted);
+}
+
+.evaluation-card__section dd {
+    margin: 0;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 599px) {
+    .evaluation-card__section dl {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .evaluation-card__section dd {
+        margin-bottom: var(--sp-1);
+    }
+}
+
+/* Formulaire « Nouvelle évaluation médicale » */
+.page-subtitle {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--fg-muted);
+}
+
+.evaluation-form__form {
+    display: grid;
+    gap: var(--sp-3);
+}
+
+.evaluation-section__number {
+    margin-right: var(--sp-2);
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.evaluation-form__actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-3) 0;
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+}
+
+.evaluation-form__actions [data-evaluation-validate] {
+    margin-left: auto;
+}
+
+.evaluation-form__actions .form-error {
+    flex-basis: 100%;
+}
+
+.evaluation-form__hint {
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+}
+
+/* Bloc d'authentification factice : visible sans JavaScript, dans la fenêtre modale sinon. */
+.evaluation-auth {
+    min-width: 0;
+    margin: 0;
+    padding: var(--sp-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--bg-raised);
+}
+
+.evaluation-auth-dialog .evaluation-auth {
+    padding: var(--sp-4);
+    border: 0;
+    border-radius: 0;
+}
+
+.evaluation-auth__title {
+    padding: 0;
+    font-size: var(--fs-4);
+    font-weight: 700;
+}
+
+.evaluation-auth__summary {
+    margin: var(--sp-1) 0 var(--sp-3);
+    color: var(--fg-muted);
+}
+
+.evaluation-auth__patient {
+    margin: 0 0 var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    overflow-wrap: anywhere;
+}
+
+.evaluation-auth .auth-dialog__actions {
+    justify-content: space-between;
+}
+
+.evaluation-auth .auth-dialog__actions[hidden] {
+    display: none;
+}
+
+/* Accès aux sections, à droite sur grand écran (même colonne que les prescriptions du dossier). */
+.evaluation-toc__list {
+    margin: 0 0 var(--sp-3);
+    padding-left: var(--sp-4);
+}
+
+.evaluation-toc__list a {
+    display: inline-block;
+    padding: 2px 0;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.evaluation-toc__help {
+    margin: 0 0 var(--sp-2);
+    color: var(--fg-muted);
+    font-size: var(--fs-1);
+}
+
+/* Évaluation : lignes calculées ou rappelées du séjour (lecture seule), sous-titre « Données générales ». */
+.evaluation-section__heading {
+    margin: var(--sp-2) 0 0;
+    color: var(--accent);
+    font-size: var(--fs-1);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.evaluation-computed {
+    display: grid;
+    grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+    gap: 2px var(--sp-3);
+    align-items: baseline;
+    padding: var(--sp-1) var(--sp-3);
+    border-radius: var(--radius);
+    background: var(--bg-muted);
+}
+
+.evaluation-computed__label {
+    color: var(--fg-muted);
+}
+
+.evaluation-computed__value {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.evaluation-computed__help {
+    grid-column: 2;
+    color: var(--fg-muted);
+}
+
+@media (max-width: 599px) {
+    .evaluation-computed {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .evaluation-computed__help {
+        grid-column: 1;
+    }
 }

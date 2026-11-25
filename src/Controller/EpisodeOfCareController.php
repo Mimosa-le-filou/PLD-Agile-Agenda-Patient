@@ -13,13 +13,14 @@ use Aura\Service\CarePlanService;
 use Aura\Service\PatientRecordService;
 use Aura\Service\RecordEditService;
 use Aura\Service\EpisodeOfCareService;
+use Aura\Service\EvaluationService;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
 
 /**
- * Écrans d'un séjour : dossier (bandeau RG2, allergies, dossier complet éditable, prescriptions
- * validées, historique), ajout / retrait d'allergie et agenda du patient, jour ou semaine
+ * Écrans d'un séjour : dossier (bandeau RG2, allergies, dossier complet éditable, évaluations médicales,
+ * prescriptions validées, historique), ajout / retrait d'allergie et agenda du patient, jour ou semaine
  * (validation d'un soin).
  *
  * Routes : GET /sejour, POST /sejour/allergies/ajouter, POST /sejour/allergies/retirer, GET /agenda-patient.
@@ -63,11 +64,15 @@ final class EpisodeOfCareController
         private ?EpisodeOfCareService $episodeOfCareService = null,
         private ?AllergyIntoleranceService $allergyIntoleranceService = null,
         private ?RecordEditService $recordEditService = null,
-        private ?AppointmentService $appointmentService = null
+        private ?AppointmentService $appointmentService = null,
+        private ?EvaluationService $evaluationService = null
     ) {
     }
 
-    /** GET /sejour?id=… : dossier d'un séjour, bandeau identité + allergies en tête (RG2). */
+    /**
+     * GET /sejour?id=… : dossier d'un séjour, bandeau identité + allergies en tête (RG2). Après l'enregistrement
+     * d'une évaluation, l'URL porte aussi &evaluation=… (identifiant, pour le message de confirmation).
+     */
     public function show(): void
     {
         $id = self::readId($_GET['id'] ?? null);
@@ -254,7 +259,32 @@ final class EpisodeOfCareController
             'prescriptions' => $this->carePlanService?->validatedLines($idEpisodeOfCare, $record['allergens']) ?? [],
             // Médecins proposés pour le bouton « Arrêter ».
             'doctors' => $this->carePlanService?->doctors() ?? [],
-        ], $title, self::RECORD_SCRIPTS);
+        ] + $this->evaluations($idEpisodeOfCare), $title, self::RECORD_SCRIPTS);
+    }
+
+    /**
+     * Section « Évaluations et suivi » (UC3) : évaluations actives du séjour, de la plus récente à la plus
+     * ancienne, et celle qui vient d'être enregistrée (?evaluation=…) pour le message de confirmation. Sans
+     * EvaluationService, la section n'est pas affichée.
+     *
+     * @return array{evaluationsEnabled: bool, evaluations: list<array<string, mixed>>,
+     *               savedEvaluation: ?array<string, mixed>}
+     */
+    private function evaluations(int $idEpisodeOfCare): array
+    {
+        if ($this->evaluationService === null) {
+            return ['evaluationsEnabled' => false, 'evaluations' => [], 'savedEvaluation' => null];
+        }
+        $evaluations = $this->evaluationService->history($idEpisodeOfCare);
+        $savedId = self::readId($_GET['evaluation'] ?? null);
+        $saved = null;
+        foreach ($evaluations as $evaluation) {
+            if ($savedId !== null && $evaluation['id'] === (string) $savedId) {
+                $saved = $evaluation;
+            }
+        }
+
+        return ['evaluationsEnabled' => true, 'evaluations' => $evaluations, 'savedEvaluation' => $saved];
     }
 
     /** Id lu dans la requête (query string ou corps du POST) ; null si absent ou mal formé. */

@@ -22,8 +22,8 @@ class EpisodeDiagnosisDao
 {
     private const SQL_DATE_FORMAT = 'Y-m-d H:i:s';
 
-    private const COLUMNS = 'idEpisodeDiagnosis, idEpisodeOfCare, idClinicalImpression, idPathology, status, notes,
-        diagnosedAt, removedAt';
+    private const COLUMNS = 'idEpisodeDiagnosis, idEpisodeOfCare, idClinicalImpression, idPathology, clinicalStatus,
+        verificationStatus, note, recordedDate, removedAt';
 
     public function __construct(private PDO $pdo)
     {
@@ -52,7 +52,7 @@ class EpisodeDiagnosisDao
         $stmt = $this->pdo->prepare(
             'SELECT ' . self::COLUMNS . ' FROM EpisodeDiagnosis
              WHERE idEpisodeOfCare = :idEpisodeOfCare AND removedAt IS NULL
-             ORDER BY diagnosedAt DESC, CAST(idEpisodeDiagnosis AS UNSIGNED) DESC'
+             ORDER BY recordedDate DESC, CAST(idEpisodeDiagnosis AS UNSIGNED) DESC'
         );
         $stmt->execute(['idEpisodeOfCare' => (string) $idEpisodeOfCare]);
 
@@ -69,7 +69,7 @@ class EpisodeDiagnosisDao
         $stmt = $this->pdo->prepare(
             'SELECT ' . self::COLUMNS . ' FROM EpisodeDiagnosis
              WHERE idClinicalImpression = :id AND removedAt IS NULL
-             ORDER BY diagnosedAt DESC, CAST(idEpisodeDiagnosis AS UNSIGNED) DESC'
+             ORDER BY recordedDate DESC, CAST(idEpisodeDiagnosis AS UNSIGNED) DESC'
         );
         $stmt->execute(['id' => $idClinicalImpression]);
 
@@ -104,17 +104,19 @@ class EpisodeDiagnosisDao
             $id = (string) $this->nextId();
             $this->pdo->prepare(
                 'INSERT INTO EpisodeDiagnosis (idEpisodeDiagnosis, idEpisodeOfCare, idClinicalImpression,
-                                               idPathology, status, notes, diagnosedAt)
-                 VALUES (:id, :idEpisodeOfCare, :idClinicalImpression, :idPathology, :status, :notes,
-                         :diagnosedAt)'
+                                               idPathology, clinicalStatus, verificationStatus, note,
+                                               recordedDate)
+                 VALUES (:id, :idEpisodeOfCare, :idClinicalImpression, :idPathology, :clinicalStatus,
+                         :verificationStatus, :note, :recordedDate)'
             )->execute([
                 'id' => $id,
                 'idEpisodeOfCare' => (string) $diagnosis->getIdEpisodeOfCare(),
                 'idClinicalImpression' => $diagnosis->getIdClinicalImpression(),
                 'idPathology' => $diagnosis->getIdPathology(),
-                'status' => $diagnosis->getStatus(),
-                'notes' => $diagnosis->getNotes(),
-                'diagnosedAt' => $diagnosis->getDiagnosedAt()->format(self::SQL_DATE_FORMAT),
+                'clinicalStatus' => $diagnosis->getClinicalStatus(),
+                'verificationStatus' => $diagnosis->getVerificationStatus(),
+                'note' => $diagnosis->getNote(),
+                'recordedDate' => $diagnosis->getRecordedDate()->format(self::SQL_DATE_FORMAT),
             ]);
 
             return $id;
@@ -122,18 +124,28 @@ class EpisodeDiagnosisDao
     }
 
     /**
-     * Change le statut et la note d'un diagnostic actif (suspecté puis retenu, retenu puis résolu…). Renvoie
+     * Change les statuts et la note d'un diagnostic actif (suspecté puis confirmé, en cours puis résolu…). Renvoie
      * false s'il n'existe pas ou a été retiré.
      *
-     * @throws \PDOException statut inconnu (CHECK chk_episodediagnosis_status)
+     * @throws \PDOException statut inconnu (CHECK chk_episodediagnosis_clinical / _verification)
      */
-    public function updateStatus(string $idEpisodeDiagnosis, string $status, ?string $notes): bool
-    {
+    public function updateStatus(
+        string $idEpisodeDiagnosis,
+        string $clinicalStatus,
+        string $verificationStatus,
+        ?string $note
+    ): bool {
         $stmt = $this->pdo->prepare(
-            'UPDATE EpisodeDiagnosis SET status = :status, notes = :notes
+            'UPDATE EpisodeDiagnosis
+             SET clinicalStatus = :clinicalStatus, verificationStatus = :verificationStatus, note = :note
              WHERE idEpisodeDiagnosis = :id AND removedAt IS NULL'
         );
-        $stmt->execute(['status' => $status, 'notes' => $notes, 'id' => $idEpisodeDiagnosis]);
+        $stmt->execute([
+            'clinicalStatus' => $clinicalStatus,
+            'verificationStatus' => $verificationStatus,
+            'note' => $note,
+            'id' => $idEpisodeDiagnosis,
+        ]);
 
         // MariaDB ne compte pas une ligne réécrite à l'identique : on vérifie alors qu'elle existe.
         return $stmt->rowCount() === 1 || $this->findById($idEpisodeDiagnosis) !== null;
@@ -172,10 +184,11 @@ class EpisodeDiagnosisDao
             idEpisodeDiagnosis: (string) $r['idEpisodeDiagnosis'],
             idEpisodeOfCare: (int) $r['idEpisodeOfCare'],
             idPathology: (string) $r['idPathology'],
-            status: (string) $r['status'],
-            diagnosedAt: new DateTimeImmutable((string) $r['diagnosedAt']),
+            recordedDate: new DateTimeImmutable((string) $r['recordedDate']),
+            clinicalStatus: (string) $r['clinicalStatus'],
+            verificationStatus: (string) $r['verificationStatus'],
             idClinicalImpression: $r['idClinicalImpression'],
-            notes: $r['notes'],
+            note: $r['note'],
             removedAt: $r['removedAt'] !== null ? new DateTimeImmutable($r['removedAt']) : null
         );
     }

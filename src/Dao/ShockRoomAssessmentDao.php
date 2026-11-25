@@ -9,7 +9,8 @@ use LogicException;
 use PDO;
 
 /**
- * Accès aux bilans de déchocage (table ShockRoomAssessment, figure 3 du cahier des charges) : au plus un par
+ * Accès aux bilans de déchocage (table ShockRoomAssessment, figure 3 du cahier des charges, modèle v2) : au plus
+ * un par
  * évaluation de type ClinicalImpression::KIND_SHOCK_ROOM (contrainte uq_shockroom_impression). Pas de suppression
  * propre : le bilan suit son évaluation (ClinicalImpressionDao::markRemoved()), et n'est lu que si celle-ci est
  * active.
@@ -18,14 +19,6 @@ use PDO;
  */
 class ShockRoomAssessmentDao
 {
-    private const COLUMNS = 'idShockRoomAssessment, idClinicalImpression,
-        arrivalGrade, traumaType, traumaMechanism, originService, smurDurationMinutes,
-        glasgowScore, hemocue1, hemocue2, smurTreatments, crystalloidsVolumeMl,
-        shockRoomDurationMinutes, seniorDoctor, residentDoctor, medicalStudent, efastResult,
-        leftPupil, rightPupil, capillaryRefillSeconds, lesionAssessment, paraclinicalWorkup,
-        ctScanWorkup, otherImaging, abnormalLabResults, visceralConsult, orthopedicConsult,
-        vascularConsult, otherConsults, igs2Score';
-
     public function __construct(private PDO $pdo)
     {
     }
@@ -34,7 +27,7 @@ class ShockRoomAssessmentDao
     public function findByClinicalImpression(string $idClinicalImpression): ?ShockRoomAssessment
     {
         $stmt = $this->pdo->prepare(
-            'SELECT ' . self::COLUMNS . ' FROM ShockRoomAssessment
+            'SELECT ' . self::columns() . ' FROM ShockRoomAssessment
              WHERE idClinicalImpression = :id
                AND idClinicalImpression IN (
                    SELECT idClinicalImpression FROM ClinicalImpression WHERE removedAt IS NULL
@@ -65,28 +58,11 @@ class ShockRoomAssessmentDao
 
         return (new Transaction($this->pdo))->run(function () use ($a, $idImpression): string {
             $id = (string) $this->nextId();
+            $fields = array_keys(ShockRoomAssessment::FIELDS);
             $stmt = $this->pdo->prepare(
-                'INSERT INTO ShockRoomAssessment (
-                    idShockRoomAssessment, idClinicalImpression, arrivalGrade,
-                    traumaType, traumaMechanism, originService,
-                    smurDurationMinutes, glasgowScore, hemocue1, hemocue2,
-                    smurTreatments, crystalloidsVolumeMl,
-                    shockRoomDurationMinutes, seniorDoctor, residentDoctor,
-                    medicalStudent, efastResult, leftPupil, rightPupil,
-                    capillaryRefillSeconds, lesionAssessment,
-                    paraclinicalWorkup, ctScanWorkup, otherImaging,
-                    abnormalLabResults, visceralConsult, orthopedicConsult,
-                    vascularConsult, otherConsults, igs2Score
-                 )
-                 SELECT
-                    :id, c.idClinicalImpression, :arrivalGrade, :traumaType, :traumaMechanism,
-                    :originService, :smurDurationMinutes, :glasgowScore, :hemocue1, :hemocue2,
-                    :smurTreatments, :crystalloidsVolumeMl, :shockRoomDurationMinutes,
-                    :seniorDoctor, :residentDoctor, :medicalStudent, :efastResult, :leftPupil,
-                    :rightPupil, :capillaryRefillSeconds, :lesionAssessment,
-                    :paraclinicalWorkup, :ctScanWorkup, :otherImaging, :abnormalLabResults,
-                    :visceralConsult, :orthopedicConsult, :vascularConsult, :otherConsults,
-                    :igs2Score
+                'INSERT INTO ShockRoomAssessment (idShockRoomAssessment, idClinicalImpression, '
+                . implode(', ', $fields) . ')
+                 SELECT :id, c.idClinicalImpression, :' . implode(', :', $fields) . '
                  FROM ClinicalImpression c
                  WHERE c.idClinicalImpression = :idClinicalImpression
                    AND c.kind = \'SHOCK_ROOM\' AND c.removedAt IS NULL'
@@ -116,24 +92,12 @@ class ShockRoomAssessmentDao
             throw new LogicException('ShockRoomAssessmentDao::update() requiert un bilan enregistré (id non nul).');
         }
 
+        $assignments = array_map(
+            static fn (string $field): string => "$field = :$field",
+            array_keys(ShockRoomAssessment::FIELDS)
+        );
         $stmt = $this->pdo->prepare(
-            'UPDATE ShockRoomAssessment SET
-                     arrivalGrade = :arrivalGrade, traumaType = :traumaType,
-                     traumaMechanism = :traumaMechanism, originService = :originService,
-                     smurDurationMinutes = :smurDurationMinutes, glasgowScore = :glasgowScore,
-                     hemocue1 = :hemocue1, hemocue2 = :hemocue2, smurTreatments = :smurTreatments,
-                     crystalloidsVolumeMl = :crystalloidsVolumeMl,
-                     shockRoomDurationMinutes = :shockRoomDurationMinutes,
-                     seniorDoctor = :seniorDoctor, residentDoctor = :residentDoctor,
-                     medicalStudent = :medicalStudent, efastResult = :efastResult,
-                     leftPupil = :leftPupil, rightPupil = :rightPupil,
-                     capillaryRefillSeconds = :capillaryRefillSeconds,
-                     lesionAssessment = :lesionAssessment,
-                     paraclinicalWorkup = :paraclinicalWorkup, ctScanWorkup = :ctScanWorkup,
-                     otherImaging = :otherImaging, abnormalLabResults = :abnormalLabResults,
-                     visceralConsult = :visceralConsult, orthopedicConsult = :orthopedicConsult,
-                     vascularConsult = :vascularConsult, otherConsults = :otherConsults,
-                     igs2Score = :igs2Score
+            'UPDATE ShockRoomAssessment SET ' . implode(', ', $assignments) . '
              WHERE idShockRoomAssessment = :id
                AND idClinicalImpression IN (
                    SELECT idClinicalImpression FROM ClinicalImpression WHERE removedAt IS NULL
@@ -159,42 +123,29 @@ class ShockRoomAssessmentDao
     }
 
     /**
-     * Valeurs des champs cliniques, une par colonne de ShockRoomAssessment::FIELDS.
+     * Valeurs des champs cliniques, une par colonne de ShockRoomAssessment::FIELDS (accesseur get…() du même
+     * nom) ; le bilan lésionnel (array) est écrit en JSON, NULL s'il est vide.
      *
      * @return array<string, scalar|null>
      */
     private function values(ShockRoomAssessment $a): array
     {
-        return [
-            'arrivalGrade' => $a->getArrivalGrade(),
-            'traumaType' => $a->getTraumaType(),
-            'traumaMechanism' => $a->getTraumaMechanism(),
-            'originService' => $a->getOriginService(),
-            'smurDurationMinutes' => $a->getSmurDurationMinutes(),
-            'glasgowScore' => $a->getGlasgowScore(),
-            'hemocue1' => $a->getHemocue1(),
-            'hemocue2' => $a->getHemocue2(),
-            'smurTreatments' => $a->getSmurTreatments(),
-            'crystalloidsVolumeMl' => $a->getCrystalloidsVolumeMl(),
-            'shockRoomDurationMinutes' => $a->getShockRoomDurationMinutes(),
-            'seniorDoctor' => $a->getSeniorDoctor(),
-            'residentDoctor' => $a->getResidentDoctor(),
-            'medicalStudent' => $a->getMedicalStudent(),
-            'efastResult' => $a->getEfastResult(),
-            'leftPupil' => $a->getLeftPupil(),
-            'rightPupil' => $a->getRightPupil(),
-            'capillaryRefillSeconds' => $a->getCapillaryRefillSeconds(),
-            'lesionAssessment' => $a->getLesionAssessment(),
-            'paraclinicalWorkup' => $a->getParaclinicalWorkup(),
-            'ctScanWorkup' => $a->getCtScanWorkup(),
-            'otherImaging' => $a->getOtherImaging(),
-            'abnormalLabResults' => $a->getAbnormalLabResults(),
-            'visceralConsult' => $a->getVisceralConsult(),
-            'orthopedicConsult' => $a->getOrthopedicConsult(),
-            'vascularConsult' => $a->getVascularConsult(),
-            'otherConsults' => $a->getOtherConsults(),
-            'igs2Score' => $a->getIgs2Score(),
-        ];
+        $values = [];
+        foreach (ShockRoomAssessment::FIELDS as $field => $type) {
+            $value = $a->{'get' . ucfirst($field)}();
+            if ($type === 'array') {
+                $value = $value === [] ? null : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            }
+            $values[$field] = $value;
+        }
+
+        return $values;
+    }
+
+    /** Colonnes lues : identifiants puis champs cliniques (noms tirés d'une constante, jamais de la requête). */
+    private static function columns(): string
+    {
+        return 'idShockRoomAssessment, idClinicalImpression, ' . implode(', ', array_keys(ShockRoomAssessment::FIELDS));
     }
 
     /**
@@ -208,42 +159,25 @@ class ShockRoomAssessmentDao
             ->fetchColumn();
     }
 
-    /** @param array<string, ?string> $r ligne aux colonnes de COLUMNS */
+    /** @param array<string, ?string> $r ligne aux colonnes de columns() */
     private function map(array $r): ShockRoomAssessment
     {
+        $arguments = [];
+        foreach (ShockRoomAssessment::FIELDS as $field => $type) {
+            $value = $r[$field];
+            $arguments[$field] = match (true) {
+                $type === 'array' => is_array($decoded = json_decode((string) $value, true)) ? $decoded : [],
+                $value === null => null,
+                $type === 'int' => (int) $value,
+                $type === 'float' => (float) $value,
+                default => $value,
+            };
+        }
+
         return new ShockRoomAssessment(
-            idShockRoomAssessment: (string) $r['idShockRoomAssessment'],
-            idClinicalImpression: (string) $r['idClinicalImpression'],
-            arrivalGrade: $r['arrivalGrade'],
-            traumaType: $r['traumaType'],
-            traumaMechanism: $r['traumaMechanism'],
-            originService: $r['originService'],
-            smurDurationMinutes: $r['smurDurationMinutes'] !== null ? (int) $r['smurDurationMinutes'] : null,
-            glasgowScore: $r['glasgowScore'] !== null ? (int) $r['glasgowScore'] : null,
-            hemocue1: $r['hemocue1'] !== null ? (float) $r['hemocue1'] : null,
-            hemocue2: $r['hemocue2'] !== null ? (float) $r['hemocue2'] : null,
-            smurTreatments: $r['smurTreatments'],
-            crystalloidsVolumeMl: $r['crystalloidsVolumeMl'] !== null ? (int) $r['crystalloidsVolumeMl'] : null,
-            shockRoomDurationMinutes: $r['shockRoomDurationMinutes'] !== null
-                ? (int) $r['shockRoomDurationMinutes']
-                : null,
-            seniorDoctor: $r['seniorDoctor'],
-            residentDoctor: $r['residentDoctor'],
-            medicalStudent: $r['medicalStudent'],
-            efastResult: $r['efastResult'],
-            leftPupil: $r['leftPupil'],
-            rightPupil: $r['rightPupil'],
-            capillaryRefillSeconds: $r['capillaryRefillSeconds'] !== null ? (float) $r['capillaryRefillSeconds'] : null,
-            lesionAssessment: $r['lesionAssessment'],
-            paraclinicalWorkup: $r['paraclinicalWorkup'],
-            ctScanWorkup: $r['ctScanWorkup'],
-            otherImaging: $r['otherImaging'],
-            abnormalLabResults: $r['abnormalLabResults'],
-            visceralConsult: $r['visceralConsult'],
-            orthopedicConsult: $r['orthopedicConsult'],
-            vascularConsult: $r['vascularConsult'],
-            otherConsults: $r['otherConsults'],
-            igs2Score: $r['igs2Score'] !== null ? (int) $r['igs2Score'] : null
+            (string) $r['idShockRoomAssessment'],
+            (string) $r['idClinicalImpression'],
+            ...$arguments
         );
     }
 }

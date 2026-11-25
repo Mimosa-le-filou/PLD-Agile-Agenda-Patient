@@ -23,12 +23,8 @@ class ClinicalObservationDao
 {
     private const SQL_DATE_FORMAT = 'Y-m-d H:i:s';
 
-    private const COLUMNS = 'idClinicalObservation, idClinicalImpression, category, selectedValue, notes,
-        examInterpretation, observedAt, removedAt';
-
-    /** Ordre d'affichage des systèmes (celui de l'écran, ClinicalObservation::CATEGORIES). */
-    private const CATEGORY_ORDER = "FIELD(category, 'SEDATION', 'NEUROLOGICAL', 'CARDIOVASCULAR', 'HEMODYNAMIC',
-        'RESPIRATORY', 'ABDOMINAL', 'URORENAL')";
+    private const COLUMNS = 'idClinicalObservation, idClinicalImpression, category, valueCodeableConcept, note,
+        interpretation, effectiveDateTime, removedAt';
 
     public function __construct(private PDO $pdo)
     {
@@ -57,7 +53,7 @@ class ClinicalObservationDao
         $stmt = $this->pdo->prepare(
             'SELECT ' . self::COLUMNS . ' FROM ClinicalObservation
              WHERE idClinicalImpression = :id AND removedAt IS NULL
-             ORDER BY ' . self::CATEGORY_ORDER . ', CAST(idClinicalObservation AS UNSIGNED)'
+             ORDER BY ' . self::categoryOrder() . ', CAST(idClinicalObservation AS UNSIGNED)'
         );
         $stmt->execute(['id' => $idClinicalImpression]);
 
@@ -69,7 +65,7 @@ class ClinicalObservationDao
      * ainsi que ClinicalImpressionDao::insert() rattache les fiches construites avant l'évaluation.
      *
      * @throws LogicException si aucune évaluation n'est désignée
-     * @throws \PDOException contrainte refusée (système inconnu, fiche vide, système déjà renseigné, évaluation
+     * @throws \PDOException contrainte refusée (système inconnu, système déjà renseigné, évaluation
      *                       absente) : rien n'est enregistré
      */
     public function insert(ClinicalObservation $observation, ?string $idClinicalImpression = null): string
@@ -83,17 +79,18 @@ class ClinicalObservationDao
             $id = (string) $this->nextId();
             $this->pdo->prepare(
                 'INSERT INTO ClinicalObservation (idClinicalObservation, idClinicalImpression, category,
-                                                  selectedValue, notes, examInterpretation, observedAt)
-                 VALUES (:id, :idClinicalImpression, :category, :selectedValue, :notes, :examInterpretation,
-                         :observedAt)'
+                                                  valueCodeableConcept, note, interpretation,
+                                                  effectiveDateTime)
+                 VALUES (:id, :idClinicalImpression, :category, :valueCodeableConcept, :note, :interpretation,
+                         :effectiveDateTime)'
             )->execute([
                 'id' => $id,
                 'idClinicalImpression' => $idImpression,
                 'category' => $observation->getCategory(),
-                'selectedValue' => $observation->getSelectedValue(),
-                'notes' => $observation->getNotes(),
-                'examInterpretation' => $observation->getExamInterpretation(),
-                'observedAt' => $observation->getObservedAt()->format(self::SQL_DATE_FORMAT),
+                'valueCodeableConcept' => $observation->getValueCodeableConcept(),
+                'note' => $observation->getNote(),
+                'interpretation' => $observation->getInterpretation(),
+                'effectiveDateTime' => $observation->getEffectiveDateTime()->format(self::SQL_DATE_FORMAT),
             ]);
 
             return $id;
@@ -101,7 +98,7 @@ class ClinicalObservationDao
     }
 
     /**
-     * Met à jour le contenu d'une fiche active (liste, note, interprétation, heure d'observation). Le système et
+     * Met à jour le contenu d'une fiche active (liste, note, interprétation, heure de l'observation). Le système et
      * l'évaluation ne changent pas. Renvoie false si la fiche n'existe pas ou a été retirée.
      *
      * @throws LogicException si la fiche n'a pas d'identifiant
@@ -115,15 +112,15 @@ class ClinicalObservationDao
 
         $stmt = $this->pdo->prepare(
             'UPDATE ClinicalObservation
-             SET selectedValue = :selectedValue, notes = :notes, examInterpretation = :examInterpretation,
-                 observedAt = :observedAt
+             SET valueCodeableConcept = :valueCodeableConcept, note = :note, interpretation = :interpretation,
+                 effectiveDateTime = :effectiveDateTime
              WHERE idClinicalObservation = :id AND removedAt IS NULL'
         );
         $stmt->execute([
-            'selectedValue' => $observation->getSelectedValue(),
-            'notes' => $observation->getNotes(),
-            'examInterpretation' => $observation->getExamInterpretation(),
-            'observedAt' => $observation->getObservedAt()->format(self::SQL_DATE_FORMAT),
+            'valueCodeableConcept' => $observation->getValueCodeableConcept(),
+            'note' => $observation->getNote(),
+            'interpretation' => $observation->getInterpretation(),
+            'effectiveDateTime' => $observation->getEffectiveDateTime()->format(self::SQL_DATE_FORMAT),
             'id' => $id,
         ]);
 
@@ -158,6 +155,15 @@ class ClinicalObservationDao
             ->fetchColumn();
     }
 
+    /**
+     * Ordre d'affichage des systèmes, celui de l'écran (ClinicalObservation::CATEGORIES) : FIELD(category, …).
+     * Les codes viennent d'une constante, jamais de la requête.
+     */
+    private static function categoryOrder(): string
+    {
+        return "FIELD(category, '" . implode("', '", array_keys(ClinicalObservation::CATEGORIES)) . "')";
+    }
+
     /** @param array<string, ?string> $r ligne aux colonnes de COLUMNS */
     private function map(array $r): ClinicalObservation
     {
@@ -165,10 +171,10 @@ class ClinicalObservationDao
             idClinicalObservation: (string) $r['idClinicalObservation'],
             idClinicalImpression: (string) $r['idClinicalImpression'],
             category: (string) $r['category'],
-            observedAt: new DateTimeImmutable((string) $r['observedAt']),
-            selectedValue: $r['selectedValue'],
-            notes: $r['notes'],
-            examInterpretation: $r['examInterpretation'],
+            effectiveDateTime: new DateTimeImmutable((string) $r['effectiveDateTime']),
+            valueCodeableConcept: $r['valueCodeableConcept'],
+            note: $r['note'],
+            interpretation: $r['interpretation'],
             removedAt: self::date($r['removedAt'])
         );
     }

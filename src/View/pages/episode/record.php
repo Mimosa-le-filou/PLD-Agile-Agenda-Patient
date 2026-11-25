@@ -5,7 +5,8 @@ use Aura\Service\RecordSectionService;
 
 /**
  * Dossier du séjour et gestion des allergies connues du patient : bandeau (RG2),
- * menu figé, résumé, allergies, dossier complet éditable, historique des modifications, séjours du
+ * menu figé, résumé, allergies, dossier complet éditable, historique des modifications, évaluations médicales
+ * (« Évaluations et suivi », UC3, lecture seule, bouton « Nouvelle évaluation » vers UC1), séjours du
  * patient, prescriptions en cours, et fenêtre de validation par un médecin (authentification FACTICE).
  * Rendue par EpisodeOfCareController::show() (GET /sejour?id=…), et en 422 après un ajout ou un retrait
  * d'allergie refusé (POST /sejour/allergies/ajouter|retirer). Données de PatientRecordService::record().
@@ -38,6 +39,10 @@ use Aura\Service\RecordSectionService;
  * @var list<array<string, mixed>> $episodeHistory séjours du patient, vue-modèle de EpisodeHistoryService::present()
  * @var ?array<string, mixed> $currentEpisode séjour en cours du patient quand le séjour affiché est un autre
  *      (EpisodeHistoryService::presentCurrent()), null sinon
+ * @var bool $evaluationsEnabled section « Évaluations et suivi » affichée (false par défaut)
+ * @var list<array<string, mixed>> $evaluations évaluations actives du séjour, vue-modèle de
+ *      EvaluationService::present(), de la plus récente à la plus ancienne ([] par défaut)
+ * @var ?array<string, mixed> $savedEvaluation évaluation qui vient d'être enregistrée (message), null sinon
  */
 $allergyError = $allergyError ?? null;
 $sections = $sections ?? [];
@@ -49,6 +54,9 @@ $services = $services ?? [];
 $referringDoctors = $referringDoctors ?? [];
 $episodeHistory = $episodeHistory ?? [];
 $currentEpisode = $currentEpisode ?? null;
+$evaluationsEnabled = $evaluationsEnabled ?? false;
+$evaluations = $evaluations ?? [];
+$savedEvaluation = $savedEvaluation ?? null;
 // Crayon « Modifier » d'une partie entière, à côté du titre de la partie.
 $partEditButton = static fn (string $part, string $title): string =>
     '<button type="button" class="part-edit" data-part-edit="' . View::e($part) . '" aria-label="Modifier la partie : '
@@ -122,13 +130,18 @@ if ($editable) {
         'label' => 'Agenda du jour',
         'icon' => 'calendar',
     ],
-    'items' => [
-        ['href' => '#dossier-resume', 'label' => 'Dossier'],
-        ['href' => '#titre-allergies', 'label' => 'Allergies'],
-        ['href' => '#titre-dossier-complet', 'label' => 'Dossier complet', 'children' => $subParts],
-        ['href' => '#titre-sejours', 'label' => 'Séjours du patient'],
-        ['href' => '#titre-prescriptions', 'label' => 'Prescriptions en cours'],
-    ],
+    'items' => array_merge(
+        [
+            ['href' => '#dossier-resume', 'label' => 'Dossier'],
+            ['href' => '#titre-allergies', 'label' => 'Allergies'],
+            ['href' => '#titre-dossier-complet', 'label' => 'Dossier complet', 'children' => $subParts],
+        ],
+        $evaluationsEnabled ? [['href' => '#titre-evaluations', 'label' => 'Évaluations et suivi']] : [],
+        [
+            ['href' => '#titre-sejours', 'label' => 'Séjours du patient'],
+            ['href' => '#titre-prescriptions', 'label' => 'Prescriptions en cours'],
+        ]
+    ),
 ]) ?>
 
 <section class="record">
@@ -416,6 +429,15 @@ if ($editable) {
         </details>
     <?php endif; ?>
     </div>
+
+    <?php if ($evaluationsEnabled) : ?>
+        <?= View::render('components/evaluation_history', [
+            'evaluations' => $evaluations,
+            'savedEvaluation' => $savedEvaluation,
+            'idEpisodeOfCare' => $idEpisodeOfCare,
+            'ongoing' => $episodeOfCare['ongoing'],
+        ]) ?>
+    <?php endif; ?>
 
     <?php /* Historique des séjours : chacun mène à son dossier. */ ?>
     <section class="record-episodes" aria-labelledby="titre-sejours">

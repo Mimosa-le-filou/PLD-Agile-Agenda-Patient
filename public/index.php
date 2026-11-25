@@ -16,6 +16,7 @@ declare(strict_types=1);
 use Aura\Controller\CareController;
 use Aura\Controller\CarePlanController;
 use Aura\Controller\EpisodeOfCareController;
+use Aura\Controller\EvaluationController;
 use Aura\Controller\PatientController;
 use Aura\Controller\RecordController;
 use Aura\Controller\ServiceController;
@@ -30,6 +31,7 @@ use Aura\Dao\AppointmentDao;
 use Aura\Dao\AuditEventDao;
 use Aura\Dao\CarePlanDao;
 use Aura\Dao\CareTeamDao;
+use Aura\Dao\ClinicalImpressionDao;
 use Aura\Dao\EpisodeOfCareDao;
 use Aura\Dao\MedicationDao;
 use Aura\Dao\PatientDao;
@@ -44,6 +46,7 @@ use Aura\Service\AppointmentService;
 use Aura\Service\CarePlanService;
 use Aura\Service\CareTeamService;
 use Aura\Service\EpisodeOfCareService;
+use Aura\Service\EvaluationService;
 use Aura\Service\IppSearchService;
 use Aura\Service\PatientDeletionService;
 use Aura\Service\PatientListService;
@@ -169,7 +172,30 @@ try {
         );
     };
 
-    $episodeOfCareController = static function () use ($recordEditService): EpisodeOfCareController {
+    // Évaluations médicales (sprint 2, UC1) : DAO des évaluations (fiches et bilan inclus), trace AuditEvent,
+    // transaction, dossier (bandeau RG2, séjour en cours) et médecins habilités (authentification factice).
+    $evaluationService = static function (PDO $pdo): EvaluationService {
+        return new EvaluationService(
+            new ClinicalImpressionDao($pdo),
+            new AuditEventDao($pdo),
+            new Transaction($pdo),
+            new PatientRecordService(
+                new EpisodeOfCareDao($pdo),
+                new PatientDao($pdo),
+                new AllergyIntoleranceDao($pdo),
+                new SubstanceDao($pdo),
+                new DateTimeImmutable('today'),
+                new ReferenceDataDao($pdo)
+            ),
+            new ReferenceDataDao($pdo),
+            new DateTimeImmutable('now')
+        );
+    };
+
+    $episodeOfCareController = static function () use (
+        $recordEditService,
+        $evaluationService
+    ): EpisodeOfCareController {
         $pdo = Database::get();
         $patientRecordService = new PatientRecordService(
             new EpisodeOfCareDao($pdo),
@@ -195,7 +221,9 @@ try {
                 new SubstanceDao($pdo),
                 new PatientDao($pdo)
             ),
-            recordEditService: $recordEditService()
+            recordEditService: $recordEditService(),
+            // Section « Évaluations et suivi » du dossier (UC3, lecture seule) et bouton « Nouvelle évaluation ».
+            evaluationService: $evaluationService($pdo)
         );
     };
 
@@ -399,6 +427,11 @@ try {
     $router->post('/care-plans/validate', static fn () => $carePlans()->validate());
     $router->post('/care-plans/stop', static fn () => $carePlans()->stop());
     $router->get('/care-plans/protocol-lines', static fn () => $carePlans()->protocolLines());
+    // Évaluation médicale classique (UC1) : formulaire, puis enregistrement validé par un médecin (factice).
+    $evaluationController = static fn (): EvaluationController =>
+        new EvaluationController($evaluationService(Database::get()));
+    $router->get('/evaluations/new', static fn () => $evaluationController()->newForm());
+    $router->post('/evaluations/create', static fn () => $evaluationController()->create());
     $router->get('/agenda-patient', $getAgenda);
     $router->post('/agenda-patient/soin', $careAction);
     $router->get('/equipes', static fn () => $teamController()->teams());

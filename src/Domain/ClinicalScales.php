@@ -135,11 +135,20 @@ final class ClinicalScales
 
     /**
      * IGS II (indice de gravité simplifié, SAPS II) : de 0 à 163 points. Bornes reprises par le CHECK
-     * chk_shockroom_igs2.
+     * chk_shockroom_igs2 (borne basse ; la borne haute est contrôlée par l'application).
      * Source : Le Gall JR, Lemeshow S, Saulnier F. A new Simplified Acute Physiology Score (SAPS II) based on a
      * European/North American multicenter study. JAMA. 1993;270(24):2957-63. https://pubmed.ncbi.nlm.nih.gov/8254858/
      */
     public const IGS2 = ['min' => 0, 'max' => 163];
+
+    /**
+     * ISS (Injury Severity Score) : somme des carrés des trois AIS les plus élevés, de 0 à 75. Bornes reprises par
+     * le CHECK chk_shockroom_iss.
+     * Source : Baker SP, O'Neill B, Haddon W Jr, Long WB. The injury severity score: a method for describing
+     * patients with multiple injuries and evaluating emergency care. J Trauma. 1974;14(3):187-96.
+     * https://pubmed.ncbi.nlm.nih.gov/4814394/
+     */
+    public const ISS = ['min' => 0, 'max' => 75];
 
     /**
      * Grade de gravité du traumatisé à l'arrivée au déchocage (« Grade à l'arrivée », figure 3.a) :
@@ -154,8 +163,19 @@ final class ClinicalScales
     ];
 
     /**
+     * Mode ventilatoire de l'évaluation respiratoire (« VS/VC », figure 2.b et écran du service) : ventilation
+     * spontanée ou contrôlée. Stocké dans ClinicalImpression.details['ventilationMode'].
+     */
+    public const VENTILATION_MODES = [
+        'VS' => 'VS : ventilation spontanée',
+        'VC' => 'VC : ventilation contrôlée',
+    ];
+
+    /**
      * Listes normalisées des fiches de suivi (« Évaluation … (LISTE) », figure 2.b), par système : clé de
-     * ClinicalObservation::CATEGORIES => [valeur stockée dans ClinicalObservation.selectedValue => libellé].
+     * ClinicalObservation::CATEGORIES => [valeur stockée dans ClinicalObservation.valueCodeableConcept => libellé].
+     * Les volets complémentaires du modèle v2 (cutané, ostéo-articulaire, métabolique, infectieux, dépistage BMR,
+     * biologie anormale) n'ont pas de liste : note et interprétation libres seulement.
      *
      * Échelles sourcées :
      * - Sédation : RASS (Richmond Agitation-Sedation Scale). Sessler CN, Gosnell MS, Grap MJ, et al. Am J Respir
@@ -167,12 +187,17 @@ final class ClinicalScales
      * - Uro-rénal : stades de l'insuffisance rénale aiguë KDIGO. KDIGO Clinical Practice Guideline for Acute
      *   Kidney Injury. Kidney Int Suppl. 2012;2(1):1-138. https://kdigo.org/guidelines/acute-kidney-injury/
      *
-     * Listes de travail sans échelle de référence (cardiovasculaire : rythme ECG ; respiratoire : support
-     * ventilatoire « VS/VC » ; abdominal : examen clinique) : termes cliniques usuels, à faire valider par le
-     * service avant tout usage réel, comme les données de démonstration.
+     * Sédation : « Non » (patient non sédaté) précède les niveaux RASS, comme le « + Sédation : Non » de
+     * l'écran du service (mail du 24/11/2026).
+     *
+     * Listes de travail sans échelle de référence (cardiovasculaire : rythme ECG ; pulmonaire : examen
+     * clinique ; abdominal : examen clinique) : termes cliniques usuels, à faire valider par le service avant tout
+     * usage réel, comme les données de démonstration. Le mode ventilatoire « VS/VC » est un champ à part
+     * (VENTILATION_MODES), plus une valeur de la liste pulmonaire.
      */
     public const OBSERVATION_LISTS = [
         ClinicalObservation::CATEGORY_SEDATION => [
+            'NONE' => 'Non : pas de sédation',
             '+4' => 'RASS +4 : combatif',
             '+3' => 'RASS +3 : très agité',
             '+2' => 'RASS +2 : agité',
@@ -206,11 +231,13 @@ final class ClinicalScales
             'DISTRIBUTIVE' => 'Choc distributif (septique, anaphylactique, vasoplégique)',
         ],
         ClinicalObservation::CATEGORY_RESPIRATORY => [
-            'SPONTANEOUS_AIR' => 'Ventilation spontanée, air ambiant',
-            'SPONTANEOUS_O2' => 'Ventilation spontanée, oxygénothérapie',
-            'HIGH_FLOW_O2' => 'Oxygénothérapie à haut débit',
-            'NIV' => 'Ventilation non invasive',
-            'INVASIVE' => 'Ventilation invasive (contrôlée)',
+            'NORMAL' => 'Auscultation normale',
+            'CONGESTION' => 'Encombrement bronchique',
+            'CRACKLES' => 'Crépitants',
+            'WHEEZING' => 'Sibilants',
+            'CONDENSATION' => 'Syndrome de condensation',
+            'PLEURAL_EFFUSION' => 'Syndrome d\'épanchement pleural',
+            'PNEUMOTHORAX' => 'Pneumothorax',
         ],
         ClinicalObservation::CATEGORY_ABDOMINAL => [
             'NORMAL' => 'Abdomen souple et indolore',

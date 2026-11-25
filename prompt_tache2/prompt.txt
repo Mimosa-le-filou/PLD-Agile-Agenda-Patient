@@ -1,0 +1,10 @@
+En utilisant le backlog sprint 1, implémente le sprint 2 (tâches T2.x qui correspond à l'implémentation de la création d'une évaluation client) et mets à jour les tâches T1.X relatives aux changements par rapport au dossier prompts (screenshot et compte-rendu-sprint1.md)
+
+Tu trouveras dans ce dossier les éléments dont tu auras besoin.
+
+En t'inspirant de l'IHM <> ajoute la sous section évaluation dans les dossiers client pour permettre la création d'une nouvelle évaluation depuis le dossier client
+Il faut également appeler l'identification du médecin (id/mdp) à l'enregistrement de l'évaluation, est déjà implémentée.
+
+Tu trouveras la spécifiation du CU dans le fichier spec_CU.pdf
+
+J'attends également un compte rendu de tout ce que tu auras fait, que tu mettras dans ce dossier prompts.

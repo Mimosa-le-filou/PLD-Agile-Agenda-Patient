@@ -6,11 +6,13 @@ use Aura\Core\View;
  * Menu figé à gauche des écrans d'un séjour (dossier, agenda) : un bouton principal en tête, toujours
  * au même endroit (« Agenda du jour » dans le dossier, « Dossier du séjour » dans l'agenda), puis les
  * parties du dossier. Dans le dossier, les sous-catégories ouvrent leur section (record-menu.js).
- * Inclus par pages/episode/record.php et pages/episode/patient-agenda.php.
+ * Inclus par pages/episode/record.php, pages/episode/patient-agenda.php et pages/evaluation/form.php.
  *
  * @var array{href: string, label: string, icon: string} $primary bouton en tête du menu
- * @var list<array{href: string, label: string, children?: list<array{href: string, label: string,
- *      openDetails?: bool}>}> $items parties ; un enfant avec openDetails reçoit data-open-details
+ * @var list<array{href: string, label: string, current?: bool, children?: list<array{href: string, label: string,
+ *      openDetails?: bool}>}> $items parties ; un enfant avec openDetails reçoit data-open-details ; current marque
+ *      la partie de la page affichée (aria-current="page"), par exemple « Évaluations et suivi » sur le formulaire
+ *      d'évaluation
  */
 ?>
 <nav class="record-menu" aria-label="Parties du dossier">
@@ -21,7 +23,8 @@ use Aura\Core\View;
     <ul class="record-menu__list">
         <?php foreach ($items as $item) : ?>
             <li>
-                <a href="<?= View::e($item['href']) ?>"><?= View::e($item['label']) ?></a>
+                <a href="<?= View::e($item['href']) ?>"<?= !empty($item['current'])
+                    ? ' aria-current="page"' : '' ?>><?= View::e($item['label']) ?></a>
                 <?php if (($item['children'] ?? []) !== []) : ?>
                     <ul class="record-menu__sub">
                         <?php foreach ($item['children'] as $child) : ?>

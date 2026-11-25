@@ -85,6 +85,33 @@ final class DerivedMeasuresService
     }
 
     /**
+     * Dépense énergétique de repos de base (kcal/j), équation de Harris et Benedict révisée :
+     *   hommes : 88,362 + 13,397 × poids (kg) + 4,799 × taille (cm) − 5,677 × âge (ans) ;
+     *   femmes : 447,593 + 9,247 × poids (kg) + 3,098 × taille (cm) − 4,330 × âge (ans).
+     * La DER de l'évaluation est ce résultat multiplié par le niveau d'agression (facteur correctif).
+     * Source : Roza AM, Shizgal HM. The Harris Benedict equation reevaluated: resting energy requirements and the
+     * body cell mass. Am J Clin Nutr. 1984;40(1):168-82. https://pubmed.ncbi.nlm.nih.gov/6741850/
+     * Null si une donnée manque, si le sexe n'est pas M/F ou si le résultat n'est pas positif.
+     */
+    public static function basalEnergyExpenditure(
+        ?string $sex,
+        ?int $ageYears,
+        ?float $weightKg,
+        ?float $heightCm
+    ): ?float {
+        if ($ageYears === null || $weightKg === null || $heightCm === null || $weightKg <= 0 || $heightCm <= 0) {
+            return null;
+        }
+        $value = match ($sex) {
+            'M' => 88.362 + 13.397 * $weightKg + 4.799 * $heightCm - 5.677 * $ageYears,
+            'F' => 447.593 + 9.247 * $weightKg + 3.098 * $heightCm - 4.330 * $ageYears,
+            default => null,
+        };
+
+        return $value !== null && $value > 0 ? $value : null;
+    }
+
+    /**
      * Vue-modèle prête à afficher : chaque valeur est une chaîne à la française ou null si non
      * calculable, avec le motif (« taille manquante ») pour que le soignant sache pourquoi.
      *

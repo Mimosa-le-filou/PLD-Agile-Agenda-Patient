@@ -5,8 +5,8 @@ use Aura\Core\View;
 /**
  * Gabarit commun de toutes les pages, rendu par View::page() (et View::error()) : en-tête HTML, barre du
  * haut (components/topbar), contenu de la page dans <main>, puis les scripts. theme.js est chargé dans
- * <head>, layout.js sur toutes les pages, et les scripts propres à la page viennent du paramètre
- * $scripts de View::page().
+ * <head> ; layout.js et validation-fr.js (messages des contrôles natifs en français) sur toutes les pages ;
+ * les scripts propres à la page viennent du paramètre $scripts de View::page().
  *
  * @var string $title titre de l'onglet (« AURA » par défaut dans View::page())
  * @var string $content HTML déjà rendu de la page (pages/…), inséré tel quel
@@ -36,6 +36,8 @@ use Aura\Core\View;
     </main>
 
     <script src="/js/layout.js"></script>
+    <?php /* Messages de validation du navigateur en français, sur tous les formulaires. */ ?>
+    <script src="/js/validation-fr.js"></script>
     <?php foreach ($scripts as $script) : ?>
         <script src="<?= View::e($script) ?>"></script>
     <?php endforeach; ?>

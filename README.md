@@ -76,6 +76,7 @@ corps du POST). Détail des réponses, des jetons CSRF et de l'authentification 
 | Dossier du séjour | `GET /sejour?id=` |
 | Allergies depuis le dossier | `POST /sejour/allergies/ajouter`, `POST /sejour/allergies/retirer` |
 | Modifications du dossier (JSON) | `POST /sejour/champ/modifier` (un champ), `POST /sejour/partie/modifier` (une partie), `POST /sejour/cloturer` (fin de séjour), `POST /sejour/deces` (décès, qui termine le séjour) |
+| Évaluation médicale classique (UC1) | `GET /evaluations/new?idEpisodeOfCare=`, `POST /evaluations/create?idEpisodeOfCare=` (JSON pour `form.js`) ; historique dans le dossier, section « Évaluations et suivi » |
 | Prescriptions | `GET /care-plans?idEpisodeOfCare=`, `GET /care-plans/new?idEpisodeOfCare=`, `POST /care-plans/create?idEpisodeOfCare=`, `POST /care-plans/validate?idEpisodeOfCare=`, `POST /care-plans/stop?idEpisodeOfCare=`, `GET /care-plans/protocol-lines?idPlanDefinition=&startDate=` (JSON) |
 | Agenda du patient | `GET /agenda-patient?id=` (ou `?numSejour=`), `&date=AAAA-MM-JJ`, `&vue=semaine` |
 | Action sur un soin | `POST /agenda-patient/soin` (réalisé, non effectué, note) |

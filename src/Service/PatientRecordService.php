@@ -48,7 +48,8 @@ final class PatientRecordService
      *               allergies: list<array<string, mixed>>, allergens: array<string, string>,
      *               substances: array<string, string>, criticalities: list<string>,
      *               sections: list<array<string, mixed>>, partValues: array<string, array<string, string>>,
-     *               services: array<string, string>, referringDoctors: array<string, string>}|null
+     *               services: array<string, string>, referringDoctors: array<string, string>,
+     *               measures: array{weightKg: ?float, heightCm: ?float, sex: ?string, age: ?int}}|null
      *         null si le séjour n'existe pas (ou si son patient a disparu : données incohérentes)
      */
     public function record(int $idEpisodeOfCare): ?array
@@ -101,6 +102,13 @@ final class PatientRecordService
             'partValues' => self::partValues($patient, $episodeOfCare),
             'services' => $services,
             'referringDoctors' => $doctors,
+            // Mesures brutes pour les calculs (DER de l'évaluation médicale) ; null = non renseignée.
+            'measures' => [
+                'weightKg' => $episodeOfCare->getWeight(),
+                'heightCm' => $episodeOfCare->getHeight(),
+                'sex' => self::textOrNull($patient->getSex()),
+                'age' => $patient->getBirthDate() === null ? null : self::age($patient->getBirthDate(), $this->today),
+            ],
         ];
     }
 

@@ -1,6 +1,6 @@
 # Tests
 
-AURA a une suite de tests volontairement courte : 245 tests PHPUnit 10, chacun lié à une règle de gestion, à la
+AURA a une suite de tests volontairement courte : 300 tests PHPUnit 10, chacun lié à une règle de gestion, à la
 sécurité du patient ou à un défaut réel déjà rencontré. Un test qui ne vérifie qu'un getter, un constructeur ou le
 balisage au caractère près n'a pas sa place ici : il casse à chaque retouche sans rien protéger.
 
@@ -18,20 +18,20 @@ Chaque règle est testée au niveau le plus bas qui suffit à la prouver.
 | Sur la vraie base | `tests/Dao/*`, `tests/Service/*IntegrationTest.php` | SQL des DAO, contraintes de `schema.sql`, transactions, enchaînements service + DAO | un simulacre ne voit ni une colonne renommée ni une contrainte qui bloque (cas réel : la PR #52 a corrigé deux DAO cassés par un renommage) |
 | HTTP de bout en bout | `tests/Http` | parcours réels : session, jeton CSRF, POST, redirections, codes 400/404 | vérifie le câblage de `public/index.php`, que les autres niveaux ne voient pas |
 
-Répartition (278 tests) :
+Répartition (300 tests) :
 
 | Dossier | Tests | Dont sur base |
 | --- | --- | --- |
 | `tests/Core` | 9 | 0 |
 | `tests/Controller` | 10 | 0 |
 | `tests/Domain` | 11 | 0 |
-| `tests/Dao` | 63 | 63 |
-| `tests/Service` | 160 | 36 |
+| `tests/Dao` | 69 | 69 |
+| `tests/Service` | 174 | 38 |
 | `tests/View` | 5 | 0 |
-| `tests/Http` | 20 | 20 |
+| `tests/Http` | 22 | 22 |
 
-Les deux suites de `phpunit.xml.dist` : `aura` (tout sauf `tests/Http`, 258 tests) et `http` (`tests/Http`,
-20 tests).
+Les deux suites de `phpunit.xml.dist` : `aura` (tout sauf `tests/Http`, 278 tests) et `http` (`tests/Http`,
+22 tests).
 
 ### Écrire un test
 
@@ -68,7 +68,7 @@ Sans aucune base, les tests purs tournent déjà :
 composer test:fast
 ```
 
-Résultat attendu : « OK, but some tests were skipped! », 225 tests dont 71 sautés (ceux qui demandent la base).
+Résultat attendu : « OK, but some tests were skipped! », 278 tests dont 107 sautés (ceux qui demandent la base).
 
 ### 2.2 Créer la base de test `aura_test` et l'utilisateur `aura_ci`
 
@@ -102,9 +102,9 @@ second crée des soins à partir du jour courant.
 
 ```bash
 export DB_HOST=127.0.0.1 DB_PORT=3306 DB_NAME=aura_test DB_USER=aura_ci DB_PASSWORD=aura_ci
-composer test            # les deux suites : « OK (245 tests, … assertions) »
-composer test:fast       # suite « aura » seulement (225 tests)
-composer test:http       # suite « http » seulement (20 tests, base requise)
+composer test            # les deux suites : « OK (300 tests, … assertions) »
+composer test:fast       # suite « aura » seulement (278 tests)
+composer test:http       # suite « http » seulement (22 tests, base requise)
 composer test:coverage   # couverture texte, et HTML dans build/coverage (extension pcov requise)
 ```
 
@@ -127,13 +127,13 @@ exécuté dans le processus PHPUnit : les tests HTTP passent par un serveur sép
 
 ### 2.5 Ce que signifient les tests sautés
 
-Sans `DB_HOST` ou `DB_NAME`, chaque test qui demande la base est marqué « sauté » (S) au lieu d'échouer : 71 dans
-la suite `aura`, les 20 de la suite `http`. PHPUnit affiche « OK, but some tests were skipped! » et rend la main
+Sans `DB_HOST` ou `DB_NAME`, chaque test qui demande la base est marqué « sauté » (S) au lieu d'échouer : 107 dans
+la suite `aura`, les 22 de la suite `http`. PHPUnit affiche « OK, but some tests were skipped! » et rend la main
 avec le code 0.
 
 Un test sauté n'a rien vérifié. Une suite verte avec des sautés prouve les règles pures, pas les DAO, les
 contraintes de la base ni les parcours HTTP. Avant de pousser, lancez la suite avec la base (ou laissez le CI le
-faire) : elle doit afficher « OK (245 tests, … assertions) », sans aucun saut.
+faire) : elle doit afficher « OK (300 tests, … assertions) », sans aucun saut.
 
 Les tests HTTP peuvent aussi être sautés avec le message « Base ouverte « … » » : la base réellement ouverte n'est
 pas une base de test (souvent un `config/config.php` aux valeurs écrites en dur, qui ignore `DB_*`). Pour voir le motif de chaque
@@ -197,7 +197,8 @@ Autres garanties essentielles :
 | Rotations 6 h, 14 h, 22 h (`CareTeam::SHIFTS`), une seule équipe par rotation pour un patient | `CareTeamServiceTest`, `CareTeamDaoTest`, `SchemaConstraintsTest` (rotation inconnue, nom d'équipe), `WorkflowsHttpTest::testTeamIsComposedAndRemovedForAShift` |
 | Décès : termine le séjour en cours, annule les soins suivants, heure invalide refusée | `RecordSectionIntegrationTest` (décès, heure de décès ou de sortie invalide), `RecordEditServiceTest::testDeathIsRefusedWithoutAnIdentifiedDoctor`, `RecordControllerTest::testDeathIsNeverChangedInline`, `WorkflowsHttpTest::testDeclaringDeathNeedsCsrfAndEndsTheStay` |
 | Édition en ligne : authentification factice exigée, séjour affiché seulement | `RecordControllerTest`, `RecordEditServiceTest`, `RecordSectionIntegrationTest::testPartNeedsTheFactitiousAuthenticationOfADoctor`, `WorkflowsHttpTest::testInlineEditNeedsFactitiousDoctorAuthenticationAndTracesTheDoctor` |
-| Évaluations patient (sprint 1) : évaluation enregistrée avec ses fiches et son bilan de déchocage, bilan refusé sur une évaluation classique, une fiche active par système, un diagnostic actif par pathologie, Glasgow 3 à 15 et IGS II 0 à 163, lignes retirées (`removedAt`) conservées mais plus lues, ordonnance reliée à son évaluation | `EvaluationDaoTest`, `SchemaConstraintsTest` (cas « Évaluation », « Fiche de suivi », « Déchocage », « Diagnostic »), `ClinicalImpressionTest` (listes et bornes de `ClinicalScales`) |
+| Évaluations patient (modèle v2) : évaluation enregistrée avec ses fiches, son bilan de déchocage et ses compléments JSON, bilan refusé sur une évaluation classique, un seul bilan de déchocage actif par séjour (`shockRoomKey`), une fiche active par système, un diagnostic actif par pathologie, statuts clinique et de vérification, Glasgow 3 à 15, ISS 0 à 75, IGS II ≥ 0, lignes retirées (`removedAt`) conservées mais plus lues, ordonnance reliée à son évaluation | `EvaluationDaoTest`, `SchemaConstraintsTest` (cas « Évaluation », « Fiche de suivi », « Déchocage », « Diagnostic »), `ClinicalImpressionTest` (listes et bornes de `ClinicalScales`) |
+| UC1, créer une évaluation classique (sprint 2, champs de l'écran du service) : champs obligatoires, valeurs hors liste (VS/VC, sédation « Non », pas de liste pour les autres informations), niveau d'agression hors bornes, DER calculée (Harris et Benedict × facteur), compléments JSON, évaluation vide, séjour inexistant ou clos (404), praticien non habilité (403), CSRF (403), erreurs par champ en JSON (422) sans rien écrire, fiches renseignées seulement, trace AuditEvent au nom du médecin, affichage dans le dossier | `EvaluationServiceTest` (pur), `EvaluationIntegrationTest`, `EvaluationHttpTest` |
 | Ligne arrêtée | `CarePlanDaoTest::testStoppingALineCancelsItsFutureScheduledCareOnly`, `AppointmentIntegrationTest::testStoppedLineAcceptsOnlyCareDoneBeforeTheStop`, `AgendaServiceTest`, `WorkflowsHttpTest::testStoppingALineNeedsCsrfAndADoctorPasswordAndCancelsItsFutureCare` |
 | CSRF sur les POST | `CsrfTest`, `RecordControllerTest::testWithoutCsrfTokenNothingIsWritten`, `WorkflowsHttpTest` (admission, soin, équipe, arrêt d'une ligne, décès : refusés sans jeton) |
 | Échappement HTML, UTF-8 invalide | `ViewTest`, `ComponentsRenderTest`, `PagesRenderTest`, `PagesHttpTest` (octet UTF-8 invalide : 400) |
